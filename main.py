@@ -8,74 +8,12 @@ import torch.nn as nn
 from tqdm import tqdm
 from torch import optim
 
+
 # from torch.utils.tensorboard import SummaryWriter
 
-from UNet import UNet
-from train_utils import setup_logging, get_data, save_images
-
-
-class Diffusion:
-    def __init__(self, noise_schedule="linear", noise_steps=1000, beta_start=1e-4, beta_end=0.02, img_size=256, device="cuda"):
-        self.noise_schedule = noise_schedule
-        self.noise_steps = noise_steps
-        self.beta_start = beta_start
-        self.beta_end = beta_end
-        self.img_size = img_size
-        self.device = device
-
-        # Noise steps
-        self.beta = self.prepare_noise_schedule().to(device)
-        # Formula: α = 1 - β
-        self.alpha = 1. - self.beta
-        # The cumulative sum of α.
-        self.alpha_hat = torch.cumprod(self.alpha, dim=0)
-
-    def prepare_noise_schedule(self, s=0.008):
-        if self.noise_schedule == "linear":
-            # simple linear noise schedule
-            beta_t =  torch.linspace(self.beta_start, self.beta_end, self.noise_steps)
-        elif self.noise_schedule == "cosine":
-            # create cosine noise schedule
-            t = torch.arange(self.noise_steps + 1)
-            alpha_t = torch.cos(((t / self.noise_steps + s) / (1 + s)) * (np.pi / 2)).pow(2)
-            # caluculate betas
-            beta_t = 1 - alpha_t[1:] / alpha_t[:-1]
-            # clip beta_t at 0.999 to pretenv singularities
-            beta_t = beta_t.clamp(max=0.999)
-        else:
-            raise NotImplementedError(f"'{self.noise_schedule}' schedule is no implemented!")
-        
-        return beta_t
-
-    def noise_images(self, x, t):
-        sqrt_alpha_hat = torch.sqrt(self.alpha_hat[t])[:, None, None, None]
-        sqrt_one_minus_alpha_hat = torch.sqrt(1 - self.alpha_hat[t])[:, None, None, None]
-        Ɛ = torch.randn_like(x)
-        return sqrt_alpha_hat * x + sqrt_one_minus_alpha_hat * Ɛ, Ɛ
-
-    def sample_timesteps(self, n):
-        return torch.randint(low=1, high=self.noise_steps, size=(n,))
-
-    def sample(self, model, n):
-        print(f"Sampling {n} new images....")
-        model.eval()
-        with torch.no_grad():
-            x = torch.randn((n, 3, self.img_size, self.img_size)).to(self.device)
-            for i in tqdm(reversed(range(1, self.noise_steps)), position=0):
-                t = (torch.ones(n) * i).long().to(self.device)
-                predicted_noise = model(x, t)
-                alpha = self.alpha[t][:, None, None, None]
-                alpha_hat = self.alpha_hat[t][:, None, None, None]
-                beta = self.beta[t][:, None, None, None]
-                if i > 1:
-                    noise = torch.randn_like(x)
-                else:
-                    noise = torch.zeros_like(x)
-                x = 1 / torch.sqrt(alpha) * (x - ((1 - alpha) / (torch.sqrt(1 - alpha_hat))) * predicted_noise) + torch.sqrt(beta) * noise
-        model.train()
-        x = (x.clamp(-1, 1) + 1) / 2
-        x = (x * 255).type(torch.uint8)
-        return x
+from model.UNet import UNet
+from model.ddpm import Diffusion as DDPMDiffusion
+from train_utils import setup_logging, get_data, save_images, initialize_model_weights
 
 
 def main():
@@ -89,37 +27,55 @@ def main():
     # setup config
 
     # load model
-    # model = get_model().to(device)
     model = UNet(image_size=args.image_size, 
                  num_classes=args.num_classes,
                  device=device,
+                 act=args.act,
                  ).to(device)
     
     print(f'Parameters (total): {sum(p.numel() for p in model.parameters()):_d}')
     print(f'Parameters (train): {sum(p.numel() for p in model.parameters() if p.requires_grad):_d}')
 
-    # set optimizer and scheduler
-    optimizer = optim.AdamW(model.parameters(), lr=args.lr)
 
-    # get dataloaders
+    # Model optimizer
+    if args.optim == "adam":
+        optimizer = optim.Adam(params=model.parameters(), lr=args.lr)
+    elif args.optim == "adamw":
+        optimizer = optim.AdamW(params=model.parameters(), lr=args.lr)
+    else:
+        raise ValueError(f'"{args.optim}" optimizer not implemented')
+    
+    # Resume Training
+    if args.resume == True:
+        from_epoch = args.from_epoch - 1
+        model_path = os.path.join(args.load_model_dir, f"model_{from_epoch}.pt" )
+        initialize_model_weights(model=model, weight_path=model_path, device=args.device)
+        
+        optim_path = os.path.join(args.load_model_dir, f"optim_{from_epoch}.pt" )
+        optim_weight_dict = torch.load(f=optim_path, map_location=device)
+        optimizer.load_state_dict(state_dict=optim_weight_dict)
+    else:
+        from_epoch = 0
+
+    # Dataloader
     dataloader = get_data(args)
 
     mse = nn.MSELoss()
 
-    diffusion = Diffusion(noise_schedule=args.noise_schedule, 
-                          img_size=args.image_size, 
-                          device=device,
+    diffusion = DDPMDiffusion(noise_schedule=args.noise_schedule, 
+                              img_size=args.image_size, 
+                              device=device,
                           )
     
     # logger = SummaryWriter(os.path.join("runs", args.run_name))
     l = len(dataloader)
 
-    for epoch in range(args.epochs):
+    for epoch in range(from_epoch, args.epochs):
         print(f"Starting epoch {epoch}:")
         pbar = tqdm(dataloader)
-        for i, (images, condition) in enumerate(pbar):
+        for i, (images, _) in enumerate(pbar):
             images = images.to(device)
-            condition = condition.to_device()
+            # condition = condition.to(device)
             t = diffusion.sample_timesteps(images.shape[0]).to(device)
             x_t, noise = diffusion.noise_images(images, t)
 
@@ -127,7 +83,7 @@ def main():
             if np.random.random() < 0.1:
                 contidion = None
 
-            predicted_noise = model(x_t, t, condition)
+            predicted_noise = model(x_t, t)
             loss = mse(noise, predicted_noise)
 
             optimizer.zero_grad()
@@ -139,20 +95,61 @@ def main():
 
         sampled_images = diffusion.sample(model, n=images.shape[0])
         save_images(sampled_images, os.path.join("results", args.run_name, f"{epoch}.jpg"))
-        torch.save(model.state_dict(), os.path.join("models", args.run_name, f"ckpt.pt"))
+
+        # save latest model
+        torch.save(model.state_dict(), os.path.join("models", args.run_name, f"model_latest.pt"))
+        torch.save(optimizer.state_dict(), os.path.join("models", args.run_name, f"optim_latest.pt"))
+
+        # save model periodically
+        if args.create_checkpoints and epoch % args.checkpoints_interval == 0:
+            torch.save(model.state_dict(), os.path.join("models", args.run_name, f"model_{epoch}.pt"))
+            torch.save(optimizer.state_dict(), os.path.join("models", args.run_name, f"optim_{epoch}.pt"))
+
 
 
 
 if __name__ == "__main__":
+
     # config
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset_path", type=str, default="./data/")
+
+    # ===========================================Base Settings============================================
+    # Total epochs for training
     parser.add_argument("--epochs", type=int, default=500)
+    # Batch size for training
     parser.add_argument("--batch_size", type=int, default=8)
+    # Dataset path
+    # Set path to folder where training images are located
+    parser.add_argument("--dataset_path", type=str, default="./data/")
+    # Input image size
     parser.add_argument("--image_size", type=int, default=32)
+    # Set noise schedule for the model
+    # Options: linear, cosine
     parser.add_argument("--noise_schedule", type=str, default="cosine")
+    # Set optimizer for the model
+    # Options: adam, adamw
+    parser.add_argument("--optim", type=str, default="adamw")
+    # Set activation function used in the UNet
+    # Options: relu, relu6, silu, lrelu, gelu
+    parser.add_argument("--act", type=str, default="silu")
+    # Set device for training
+    # Options: cpu or cuda
     parser.add_argument("--device", type=str, default=('cuda' if torch.cuda.is_available() else 'cpu'))
+
+    # If conditional generation is trained 
     parser.add_argument("--num_classes", type=int, default=None)
+
+    # ===========================================Training Checkpoints======================================
+    # Set if model checkpoints are saved
+    parser.add_argument("--create_checkpoints", type=bool, default=True)
+    # Set per how many epochs a model checkpoint is created
+    parser.add_argument("--checkpoints_interval", type=int, default=50)
+
+    # ===========================================Resume Training===========================================
+    parser.add_argument("--resume", type=bool, default=False)
+    parser.add_argument("--from_epoch", type=int, default=-1)
+    parser.add_argument("--load_model_dir", type=str, default="")
+
     args = parser.parse_args()
 
     args.run_name = f"2d_geometric_shapes_{args.image_size}_{np.round(time.time(), 0)}"

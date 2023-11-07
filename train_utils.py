@@ -42,3 +42,8 @@ def get_data(args):
     dataset = torchvision.datasets.ImageFolder(args.dataset_path, transform=transforms)
     dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
     return dataloader
+
+
+def initialize_model_weights(model, weight_path, device):
+    model_weights_dict = torch.load(f=weight_path, map_location=device)
+    model.load_state_dict(model_weights_dict)
