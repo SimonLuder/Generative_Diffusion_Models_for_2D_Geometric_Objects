@@ -9,40 +9,75 @@ from tqdm import tqdm
 from torch import optim
 
 
+
 class Diffusion:
-    def __init__(self, noise_schedule="linear", noise_steps=1000, beta_start=1e-4, beta_end=0.02, img_size=256, device="cuda"):
+    def __init__(self, img_size=256, noise_schedule="linear", noise_steps=1000, beta_start=1e-4, beta_end=0.02, s=0.008, device="cuda"):
+        self.img_size = img_size
         self.noise_schedule = noise_schedule
         self.noise_steps = noise_steps
         self.beta_start = beta_start
         self.beta_end = beta_end
-        self.img_size = img_size
+        self.s = s
         self.device = device
 
-        # Noise steps
-        self.beta = self.prepare_noise_schedule().to(device)
+        self.prepare_noise_schedule()
+        self.beta = self.beta.to(device)
+        self.alpha = self.alpha.to(device)
+        self.alpha_hat = self.alpha_hat.to(device)
+
+
+    def prepare_noise_schedule(self):
+        
+        if self.noise_schedule == "linear":
+            self.linear_noise_schedule()
+
+        elif self.noise_schedule == "cosine":
+            self.cosine_noise_schedule()
+
+        # elif self.noise_schedule == "cosine2":
+        #     s = self.s
+        #     n_steps = self.noise_steps
+        #     def f(t, n_steps=1000, s=0.008):
+        #         return torch.cos(torch.tensor((t/n_steps + s)/(1 + s)*torch.pi/2))**2
+        #     self.alpha_hat = torch.tensor([f(t, n_steps, s)/f(0, n_steps, s) for t in range(n_steps)])
+        #     self.beta = torch.tensor([0] + [1 - self.alpha_hat[t]/self.alpha_hat[t-1] for t in range(1, n_steps)])
+        #     self.alpha = 1. - self.beta
+
+        # elif self.noise_schedule == "cosine3":
+        #     # create cosine noise schedule
+        #     s = self.s
+        #     steps = self.noise_steps + 1
+        #     t = torch.linspace(0, 1, steps)
+        #     alpha_hat = torch.cos(((t + s) / (1 + s)) * (np.pi / 2)).pow(2)
+        #     alpha_hat = alpha_hat / alpha_hat[0]
+        #     # caluculate β
+        #     beta = 1 - alpha_hat[1:] / alpha_hat[:-1]
+        #     #scale β
+        #     self.beta = self.beta_start + beta * (self.beta_end - self.beta_start)
+        #     # Formula: α = 1 - β
+        #     self.alpha = 1. - self.beta
+        #     # The cumulative sum of α.
+        #     self.alpha_hat = torch.cumprod(self.alpha, dim=0)
+        
+    def linear_noise_schedule(self):
+        # create linear noise schedule
+        self.beta =  torch.linspace(self.beta_start, self.beta_end, self.noise_steps)
         # Formula: α = 1 - β
         self.alpha = 1. - self.beta
-        # The cumulative sum of α.
+        # The cumulative product of α.
         self.alpha_hat = torch.cumprod(self.alpha, dim=0)
 
-    def prepare_noise_schedule(self, s=0.008):
-        if self.noise_schedule == "linear":
-            # simple linear noise schedule
-            beta_t =  torch.linspace(self.beta_start, self.beta_end, self.noise_steps)
-        elif self.noise_schedule == "cosine":
-            # create cosine noise schedule
-            steps = self.noise_steps + 1
-            t = torch.linspace(0, self.noise_steps, steps)
-            alpha_t = torch.cos(((t / self.noise_steps + s) / (1 + s)) * (np.pi / 2)).pow(2)
-            alpha_t = alpha_t / alpha_t[0]
-            # caluculate betas
-            beta_t = 1 - alpha_t[1:] / alpha_t[:-1]
-            # clip beta_t at 0.999 to pretenv singularities
-            beta_t = beta_t.clamp(max=0.999)
-        else:
-            raise NotImplementedError(f"'{self.noise_schedule}' schedule is no implemented!")
-        
-        return beta_t
+    def cosine_noise_schedule(self):
+        # create cosine noise schedule
+        steps = self.noise_steps + 1
+        s = self.s
+        t = torch.linspace(0, 1, steps)
+        alpha_hat = torch.cos(((t + s) / (1 + s)) * (np.pi / 2)).pow(2)
+        self.alpha_hat = alpha_hat / alpha_hat[0]
+        # caluculate β
+        self.beta = 1 - alpha_hat[1:] / alpha_hat[:-1]
+        # Formula: α = 1 - β
+        self.alpha = 1. - self.beta
 
     def noise_images(self, x, t):
         sqrt_alpha_hat = torch.sqrt(self.alpha_hat[t])[:, None, None, None]
@@ -53,14 +88,20 @@ class Diffusion:
     def sample_timesteps(self, n):
         return torch.randint(low=1, high=self.noise_steps, size=(n,))
 
-    def sample(self, model, n):
+    def sample(self, model, n, condition, cfg_scale=3):
         print(f"Sampling {n} new images....")
         model.eval()
         with torch.no_grad():
             x = torch.randn((n, 3, self.img_size, self.img_size)).to(self.device)
             for i in tqdm(reversed(range(1, self.noise_steps)), position=0):
                 t = (torch.ones(n) * i).long().to(self.device)
-                predicted_noise = model(x, t)
+                predicted_noise = model(x, t, condition)
+
+                if cfg_scale > 0:
+                    predicted_noise_unconditional = model(x, t)
+                    # predicted_noise = torch.lerp(predicted_noise, predicted_noise_unconditional, cfg_scale)
+                    predicted_noise = (1 + cfg_scale) * predicted_noise - cfg_scale * predicted_noise_unconditional # https://arxiv.org/pdf/2207.12598.pdf eq. 6
+ 
                 alpha = self.alpha[t][:, None, None, None]
                 alpha_hat = self.alpha_hat[t][:, None, None, None]
                 beta = self.beta[t][:, None, None, None]

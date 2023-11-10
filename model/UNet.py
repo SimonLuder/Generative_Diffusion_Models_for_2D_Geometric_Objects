@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from modules import UpBlock, DownBlock, DoubleConv, SelfAttention
-
+from embedding import ConditionalClassEmbedding
 
 class UNet(nn.Module):
     """
@@ -85,7 +85,8 @@ class UNet(nn.Module):
         self.outc = nn.Conv2d(in_channels=channel[0], out_channels=out_channel, kernel_size=1)
 
         if num_classes is not None:
-            self.label_emb = nn.Embedding(num_embeddings=num_classes, embedding_dim=time_channel)
+            # self.label_emb = nn.Embedding(num_embeddings=num_classes, embedding_dim=time_channel)
+            self.label_emb = ConditionalClassEmbedding(input_dim=num_classes, embedding_dim=time_channel, out_dim=time_channel)
 
     def pos_encoding(self, time, channels):
         """

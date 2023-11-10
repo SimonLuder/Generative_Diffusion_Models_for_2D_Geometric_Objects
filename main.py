@@ -62,8 +62,11 @@ def main():
 
     mse = nn.MSELoss()
 
-    diffusion = DDPMDiffusion(noise_schedule=args.noise_schedule, 
-                              img_size=args.image_size, 
+    diffusion = DDPMDiffusion(img_size=args.image_size, 
+                              noise_schedule=args.noise_schedule, 
+                              beta_start=args.beta_start, 
+                              beta_end=args.beta_end,
+                              s=args.s,
                               device=device,
                           )
     
@@ -73,9 +76,9 @@ def main():
     for epoch in range(from_epoch, args.epochs):
         print(f"Starting epoch {epoch}:")
         pbar = tqdm(dataloader)
-        for i, (images, _) in enumerate(pbar):
+        for i, (images, condition) in enumerate(pbar):
             images = images.to(device)
-            # condition = condition.to(device)
+            condition = condition.to(device)
             t = diffusion.sample_timesteps(images.shape[0]).to(device)
             x_t, noise = diffusion.noise_images(images, t)
 
@@ -83,7 +86,7 @@ def main():
             if np.random.random() < 0.1:
                 contidion = None
 
-            predicted_noise = model(x_t, t)
+            predicted_noise = model(x=x_t, time=t, y=condition)
             loss = mse(noise, predicted_noise)
 
             optimizer.zero_grad()
@@ -120,12 +123,18 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=8)
     # Dataset path
     # Set path to folder where training images are located
-    parser.add_argument("--dataset_path", type=str, default="./data/")
+    parser.add_argument("--dataset_path", type=str, default="./data2/")
     # Input image size
     parser.add_argument("--image_size", type=int, default=32)
+
     # Set noise schedule for the model
     # Options: linear, cosine
     parser.add_argument("--noise_schedule", type=str, default="cosine")
+    parser.add_argument("--beta_start", type=float, default=1e-4)
+    parser.add_argument("--beta_end", type=float, default=0.02)
+    # for cosine noise schedule only
+    parser.add_argument("--s", type=float, default=0.008)
+
     # Set optimizer for the model
     # Options: adam, adamw
     parser.add_argument("--optim", type=str, default="adamw")
