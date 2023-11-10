@@ -24,8 +24,6 @@ def main():
     # get device 
     device = args.device
     
-    # setup config
-
     # load model
     model = UNet(image_size=args.image_size, 
                  num_classes=args.num_classes,
@@ -35,7 +33,6 @@ def main():
     
     print(f'Parameters (total): {sum(p.numel() for p in model.parameters()):_d}')
     print(f'Parameters (train): {sum(p.numel() for p in model.parameters() if p.requires_grad):_d}')
-
 
     # Model optimizer
     if args.optim == "adam":
@@ -83,8 +80,8 @@ def main():
             x_t, noise = diffusion.noise_images(images, t)
 
             # set propoportion of conditions to zero
-            if np.random.random() < 0.1:
-                contidion = None
+            if args.num_classes is None or np.random.random() < 0.1:
+                condition = None
 
             predicted_noise = model(x=x_t, time=t, y=condition)
             loss = mse(noise, predicted_noise)
@@ -96,7 +93,10 @@ def main():
             pbar.set_postfix(MSE=loss.item())
             # logger.add_scalar("MSE", loss.item(), global_step=epoch * l + i)
 
-        sampled_images = diffusion.sample(model, n=images.shape[0])
+        if args.num_classes is not None:
+            condition = torch.arange(0, args.num_classes - 1, 1).to(device)
+            print(condition)
+        sampled_images = diffusion.sample(model, n=images.shape[0], condition=condition)
         save_images(sampled_images, os.path.join("results", args.run_name, f"{epoch}.jpg"))
 
         # save latest model
@@ -123,13 +123,13 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=8)
     # Dataset path
     # Set path to folder where training images are located
-    parser.add_argument("--dataset_path", type=str, default="./data2/")
+    parser.add_argument("--dataset_path", type=str, default="./data/Conditional")
     # Input image size
     parser.add_argument("--image_size", type=int, default=32)
 
     # Set noise schedule for the model
     # Options: linear, cosine
-    parser.add_argument("--noise_schedule", type=str, default="cosine")
+    parser.add_argument("--noise_schedule", type=str, default="linear")
     parser.add_argument("--beta_start", type=float, default=1e-4)
     parser.add_argument("--beta_end", type=float, default=0.02)
     # for cosine noise schedule only
@@ -145,14 +145,15 @@ if __name__ == "__main__":
     # Options: cpu or cuda
     parser.add_argument("--device", type=str, default=('cuda' if torch.cuda.is_available() else 'cpu'))
 
+    # ===========================================Conditioning=============================================
     # If conditional generation is trained 
-    parser.add_argument("--num_classes", type=int, default=None)
+    parser.add_argument("--num_classes", type=int, default=9)
 
     # ===========================================Training Checkpoints======================================
     # Set if model checkpoints are saved
     parser.add_argument("--create_checkpoints", type=bool, default=True)
     # Set per how many epochs a model checkpoint is created
-    parser.add_argument("--checkpoints_interval", type=int, default=50)
+    parser.add_argument("--checkpoints_interval", type=int, default=100)
 
     # ===========================================Resume Training===========================================
     parser.add_argument("--resume", type=bool, default=False)
