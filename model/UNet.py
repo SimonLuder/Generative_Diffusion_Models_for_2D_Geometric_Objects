@@ -2,14 +2,14 @@ import torch
 import torch.nn as nn
 
 from modules import UpBlock, DownBlock, DoubleConv, SelfAttention
-from embedding import ConditionalClassEmbedding
+from embedding import ConditionalClassEmbedding, CLIPTextEmbedding
 
 class UNet(nn.Module):
     """
     UNet
     """
 
-    def __init__(self, in_channel=3, out_channel=3, channel=None, time_channel=256, num_classes=None, image_size=64,
+    def __init__(self, in_channel=3, out_channel=3, channel=None, time_channel=256, cfg_encoding="classes", num_classes=None, image_size=64,
                  device="cpu", act="silu"):
         """
         Initialize the UNet network
@@ -17,6 +17,7 @@ class UNet(nn.Module):
         :param out_channel: Output channel
         :param channel: The list of channel
         :param time_channel: Time channel
+        :param cfg_encoding: "classes" or "clip"
         :param num_classes: Number of classes
         :param image_size: Adaptive image size
         :param device: Device type
@@ -84,9 +85,12 @@ class UNet(nn.Module):
         # size: size
         self.outc = nn.Conv2d(in_channels=channel[0], out_channels=out_channel, kernel_size=1)
 
-        if num_classes is not None:
+        if cfg_encoding == "classes" and num_classes is not None:
             # self.label_emb = nn.Embedding(num_embeddings=num_classes, embedding_dim=time_channel)
-            self.label_emb = ConditionalClassEmbedding(input_dim=num_classes, embedding_dim=time_channel, out_dim=time_channel)
+            self.label_emb = ConditionalClassEmbedding(num_embeddings=num_classes, embedding_dim=time_channel, out_dim=time_channel)
+        elif cfg_encoding == "clip":
+            # self.label_emb = nn.Embedding(num_embeddings=num_classes, embedding_dim=time_channel)
+            self.label_emb = CLIPTextEmbedding(out_dim=time_channel)
 
     def pos_encoding(self, time, channels):
         """

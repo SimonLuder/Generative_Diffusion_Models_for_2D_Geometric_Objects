@@ -2,18 +2,20 @@ import os
 import time
 import argparse
 import numpy as np
+import pandas as pd
 
 import torch
 import torch.nn as nn
 from tqdm import tqdm
 from torch import optim
 
+import clip
 
 # from torch.utils.tensorboard import SummaryWriter
 
 from model.UNet import UNet
 from model.ddpm import Diffusion as DDPMDiffusion
-from train_utils import setup_logging, get_data, save_images, initialize_model_weights
+from train_utils import setup_logging, get_data, save_images, initialize_model_weights, sample_condition
 
 
 def main():
@@ -26,6 +28,7 @@ def main():
     
     # load model
     model = UNet(image_size=args.image_size, 
+                 cfg_encoding=args.cfg_encoding,
                  num_classes=args.num_classes,
                  device=device,
                  act=args.act,
@@ -74,8 +77,14 @@ def main():
         print(f"Starting epoch {epoch}:")
         pbar = tqdm(dataloader)
         for i, (images, condition) in enumerate(pbar):
+            
+            # apply clip tokenization
+            if args.cfg_encoding == "clip":
+                condition = clip.tokenize(condition)
+
             images = images.to(device)
             condition = condition.to(device)
+
             t = diffusion.sample_timesteps(images.shape[0]).to(device)
             x_t, noise = diffusion.noise_images(images, t)
 
@@ -93,10 +102,9 @@ def main():
             pbar.set_postfix(MSE=loss.item())
             # logger.add_scalar("MSE", loss.item(), global_step=epoch * l + i)
 
-        if args.num_classes is not None:
-            condition = torch.arange(0, args.num_classes - 1, 1).to(device)
-            print(condition)
-        sampled_images = diffusion.sample(model, n=images.shape[0], condition=condition)
+    
+        condition = sample_condition(args=args).to(device)
+        sampled_images = diffusion.sample(model, n=args.num_classes, condition=condition)
         save_images(sampled_images, os.path.join("results", args.run_name, f"{epoch}.jpg"))
 
         # save latest model
@@ -107,7 +115,6 @@ def main():
         if args.create_checkpoints and epoch % args.checkpoints_interval == 0:
             torch.save(model.state_dict(), os.path.join("models", args.run_name, f"model_{epoch}.pt"))
             torch.save(optimizer.state_dict(), os.path.join("models", args.run_name, f"optim_{epoch}.pt"))
-
 
 
 
@@ -123,7 +130,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=8)
     # Dataset path
     # Set path to folder where training images are located
-    parser.add_argument("--dataset_path", type=str, default="./data/Conditional")
+    parser.add_argument("--dataset_path", type=str, default="./data/Unconditional/shapes32/")
     # Input image size
     parser.add_argument("--image_size", type=int, default=32)
 
@@ -147,7 +154,12 @@ if __name__ == "__main__":
 
     # ===========================================Conditioning=============================================
     # If conditional generation is trained 
+    parser.add_argument("--cfg_encoding", type=str, default="clip")
+    # only relevant if cfg_encoding is set to "classes"
     parser.add_argument("--num_classes", type=int, default=9)
+    # only relevant if cfg_encoding is "clip"
+    parser.add_argument("--captions_file", type=str, default="data/Unconditional/prompts.csv")
+    
 
     # ===========================================Training Checkpoints======================================
     # Set if model checkpoints are saved
