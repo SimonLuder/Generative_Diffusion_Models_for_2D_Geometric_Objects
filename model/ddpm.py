@@ -34,31 +34,6 @@ class Diffusion:
         elif self.noise_schedule == "cosine":
             self.cosine_noise_schedule()
 
-        # elif self.noise_schedule == "cosine2":
-        #     s = self.s
-        #     n_steps = self.noise_steps
-        #     def f(t, n_steps=1000, s=0.008):
-        #         return torch.cos(torch.tensor((t/n_steps + s)/(1 + s)*torch.pi/2))**2
-        #     self.alpha_hat = torch.tensor([f(t, n_steps, s)/f(0, n_steps, s) for t in range(n_steps)])
-        #     self.beta = torch.tensor([0] + [1 - self.alpha_hat[t]/self.alpha_hat[t-1] for t in range(1, n_steps)])
-        #     self.alpha = 1. - self.beta
-
-        # elif self.noise_schedule == "cosine3":
-        #     # create cosine noise schedule
-        #     s = self.s
-        #     steps = self.noise_steps + 1
-        #     t = torch.linspace(0, 1, steps)
-        #     alpha_hat = torch.cos(((t + s) / (1 + s)) * (np.pi / 2)).pow(2)
-        #     alpha_hat = alpha_hat / alpha_hat[0]
-        #     # caluculate β
-        #     beta = 1 - alpha_hat[1:] / alpha_hat[:-1]
-        #     #scale β
-        #     self.beta = self.beta_start + beta * (self.beta_end - self.beta_start)
-        #     # Formula: α = 1 - β
-        #     self.alpha = 1. - self.beta
-        #     # The cumulative sum of α.
-        #     self.alpha_hat = torch.cumprod(self.alpha, dim=0)
-        
     def linear_noise_schedule(self):
         # create linear noise schedule
         self.beta =  torch.linspace(self.beta_start, self.beta_end, self.noise_steps)
@@ -99,7 +74,6 @@ class Diffusion:
 
                 if cfg_scale > 0:
                     predicted_noise_unconditional = model(x, t)
-                    # predicted_noise = torch.lerp(predicted_noise, predicted_noise_unconditional, cfg_scale)
                     predicted_noise = (1 + cfg_scale) * predicted_noise - cfg_scale * predicted_noise_unconditional # https://arxiv.org/pdf/2207.12598.pdf eq. 6
  
                 alpha = self.alpha[t][:, None, None, None]
