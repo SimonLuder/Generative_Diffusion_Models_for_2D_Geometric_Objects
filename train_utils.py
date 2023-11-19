@@ -62,8 +62,8 @@ def sample_condition(args):
     elif args.cfg_encoding == "class" and args.num_classes is not None:
         condition = torch.arange(0, args.num_classes, 1)
 
-    elif args.cfg_encoding == "clip" and args.val_caption_file is not None:
-        df = pd.read_csv(args.val_caption_file, header=None, names=["image_files", "captions"])
+    elif args.cfg_encoding == "clip" and args.val_captions_file is not None:
+        df = pd.read_csv(args.val_captions_file, header=None, names=["image_files", "captions"])
         condition = clip.tokenize(df["captions"].tolist())
 
     return condition
