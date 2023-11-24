@@ -51,3 +51,4 @@ data/
 models/
 sd/
 results/
+wandb/
