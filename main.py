@@ -24,8 +24,7 @@ def main():
     # Setup WandbManager
     wandb_manager = WandbManager(vars(args))
     # init run
-    wandb_manager.init()
-
+    run = wandb_manager.init()
 
     # setup logging
     setup(args)
@@ -82,6 +81,9 @@ def main():
     
     for epoch in range(from_epoch, args.epochs):
         print(f"Starting epoch {epoch}:")
+
+        log_data=dict()
+        log_data["epoch"] = epoch
         
         epoch_loss = 0
         pbar = tqdm(dataloader["train"])
@@ -112,14 +114,19 @@ def main():
             pbar.set_postfix(MSE=loss.item())
             # logger.add_scalar("MSE", loss.item(), global_step=epoch * l + i)
 
+        log_data["epoch_loss"] = epoch_loss
+
         # validation loop
         if epoch % args.val_interval == 0:
     
-
             save_dir = f"results/{args.run_name}/{epoch}"
             Path( save_dir ).mkdir( parents=True, exist_ok=True )
 
             wandb_log_table = WandbTable()
+
+            total_iou = 0
+            total_cdist = 0
+            n = 0
 
             pbar = tqdm(dataloader["val"])
             for (images, condition, filenames) in pbar:
@@ -138,15 +145,15 @@ def main():
 
                 predicted_images = diffusion.sample(model, condition=condition)
 
-                iou = iou_pytorch(images, predicted_images)
-                l2 = center_distance_pytorch(images, predicted_images)
+                iou = iou_pytorch(images, predicted_images).cpu()
+                cdist = center_distance_pytorch(images, predicted_images).cpu()
 
                 for ixd in range(images.shape[0]):
                     result= {"true_image":wandb_image(images[ixd].cpu().numpy()), 
                             "generated_image":wandb_image(predicted_images[ixd].cpu().numpy()),
                             "condition":raw_condition[ixd],
-                            "IoU":iou[ixd], 
-                            "l2_distance":l2[ixd], 
+                            "IoU":iou[ixd].item(), 
+                            "l2_distance":cdist[ixd].item(), 
                             "epoch":epoch,
                             "filename":filenames[ixd]
                             }
@@ -156,12 +163,19 @@ def main():
                                   filenames=filenames, 
                                   save_dir=save_dir,
                                   )
-
-            wandb_manager.log({"validation_results": wandb_log_table.get_table()})
                 
-                
+                total_iou += torch.nansum(iou).item()
+                total_cdist += torch.nansum(cdist).item()
+                n += len(images)
 
-        wandb_manager.log({"epoch": epoch, "epoch_loss": epoch_loss})
+ 
+            run.log(data={"validation_results": wandb_log_table.get_table()})
+
+            log_data["mean_iou"] = total_iou / n
+            log_data["mean_cdist"] = total_cdist / n
+   
+                
+        run.log(data=log_data, step=epoch+1)
 
         # save latest model
         torch.save(model.state_dict(), os.path.join("models", args.run_name, f"model_latest.pt"))
@@ -181,7 +195,7 @@ if __name__ == "__main__":
 
     # ===========================================Run Settings=============================================
     parser.add_argument("--project", type=str, default=f"MSE_P7")
-    parser.add_argument("--run_name", type=str, default=f"2D_GeomShapes_{time.time():.0f}")
+    parser.add_argument("--run_name", type=str, default=f"2D_GeoShape_128_linear_clip_{time.time():.0f}")
 
 
     # ===========================================Base Settings============================================
@@ -217,11 +231,11 @@ if __name__ == "__main__":
     parser.add_argument("--val_images", type=str, default="./data/test32/images/")
 
     # Only relevant if cfg_encoding is "clip"
-    parser.add_argument("--train_labels", type=str, default="data/train32/labels.csv")
-    parser.add_argument("--val_labels", type=str, default="data/test32/labels.csv")
+    parser.add_argument("--train_labels", type=str, default="data/train32/labels_20.csv")
+    parser.add_argument("--val_labels", type=str, default="data/test32/labels_2.csv")
 
     # ===========================================Validation===============================================
-    parser.add_argument("--val_interval", type=int, default=25)
+    parser.add_argument("--val_interval", type=int, default=50)
 
     # ===========================================Conditioning=============================================
     # If conditional generation is trained 

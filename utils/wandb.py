@@ -11,13 +11,8 @@ class WandbManager:
         self.run = wandb.init(project=self.config['project'], 
                               name=self.config['run_name'], 
                               config=self.config)
-
-    def log(self, data):
-        self.run.log(data)
-
-    def finish(self):
-        self.run.finish()
-
+        return self.run
+    
 
 class WandbTable:
     """

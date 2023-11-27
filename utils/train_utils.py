@@ -19,7 +19,7 @@ def setup(args):
 
 def resume_from_checkpoint():
     raise NotImplementedError(f"'resume_from_checkpoint' is no implemented!")
- 
+
 
 def plot_images(images):
     plt.figure(figsize=(32, 32))
@@ -34,6 +34,7 @@ def save_images(images, path, **kwargs):
     ndarr = grid.permute(1, 2, 0).to('cpu').numpy()
     im = Image.fromarray(ndarr)
     im.save(path)
+
 
 def save_images_batch(images, filenames, save_dir):
     """
@@ -56,8 +57,6 @@ def save_images_batch(images, filenames, save_dir):
         filename = os.path.join(save_dir, os.path.basename(filename))
         image.save(filename)
         # torchvision.utils.save_image(image, filename)
-
-    
 
 
 def get_dataloader(args):
@@ -85,21 +84,6 @@ def get_dataloader(args):
     return dataloader
     
 
-# def sample_condition(args):
-#     condition = None
-#     if args.cfg_encoding is None:
-#         pass
-
-#     elif args.cfg_encoding == "class" and args.num_classes is not None:
-#         condition = torch.arange(0, args.num_classes, 1)
-
-#     elif args.cfg_encoding == "clip" and args.val_captions_file is not None:
-#         df = pd.read_csv(args.val_captions_file)
-#         condition = clip.tokenize(df["prompt"].tolist())
-
-#     return condition
-
-    
 def initialize_model_weights(model, weight_path, device):
     model_weights_dict = torch.load(f=weight_path, map_location=device)
     model.load_state_dict(model_weights_dict)

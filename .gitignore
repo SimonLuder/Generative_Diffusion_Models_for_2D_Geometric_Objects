@@ -51,4 +51,7 @@ data/
 models/
 sd/
 results/
+
+# wandb
 wandb/
+artifacts/

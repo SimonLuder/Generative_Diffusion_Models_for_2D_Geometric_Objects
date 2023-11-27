@@ -72,7 +72,7 @@ def iou_pytorch(outputs: torch.Tensor, labels: torch.Tensor, threshold: float = 
 
     return iou
 
-def center_distance_pytorch(outputs: torch.Tensor, labels: torch.Tensor, threshold: float = 0.5):
+def center_distance_pytorch(outputs: torch.Tensor, labels: torch.Tensor, threshold: float = 0.5, device="cpu"):
     """
     Calculate Intersection over Union (IoU) for RGB images.
 
@@ -94,8 +94,8 @@ def center_distance_pytorch(outputs: torch.Tensor, labels: torch.Tensor, thresho
     outputs_bin = (outputs > threshold).float()
     labels_bin = (labels > threshold).float()
 
-    outputs_centers = batch_center_of_mass(outputs_bin)
-    labels_centers = batch_center_of_mass(labels_bin)
+    outputs_centers = batch_center_of_mass(outputs_bin, device=device)
+    labels_centers = batch_center_of_mass(labels_bin, device=device)
 
     center_distances = torch.abs(outputs_centers - labels_centers)
 
@@ -104,7 +104,7 @@ def center_distance_pytorch(outputs: torch.Tensor, labels: torch.Tensor, thresho
     return l2
 
 
-def batch_center_of_mass(bin_images, device="cuda"):
+def batch_center_of_mass(bin_images, device="cpu"):
     """
     Calculate the center of mass of binary pixels for each image in a mini-batch in a vectorized way.
 
@@ -115,6 +115,8 @@ def batch_center_of_mass(bin_images, device="cuda"):
     Returns:
     Tensor: Tensor of shape (B, 2) containing the (x, y) coordinates of the center of mass for each image.
     """
+    bin_images = bin_images.to(device)
+
     # Create meshgrid for coordinates
     x_coord = torch.arange(bin_images.shape[3]).to(device)
     y_coord = torch.arange(bin_images.shape[2]).to(device)
