@@ -55,3 +55,4 @@ results/
 # wandb
 wandb/
 artifacts/
+logs/

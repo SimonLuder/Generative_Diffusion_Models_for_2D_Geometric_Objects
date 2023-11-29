@@ -61,8 +61,8 @@ def save_images_batch(images, filenames, save_dir):
 
 def get_dataloader(args):
     transforms = torchvision.transforms.Compose([
-            torchvision.transforms.Resize(80),  # args.image_size + 1/4 *args.image_size 80 for args.image_size = 64 ????
-            torchvision.transforms.RandomResizedCrop(args.image_size, scale=(0.8, 1.0)),
+            # torchvision.transforms.Resize(80),  # args.image_size + 1/4 *args.image_size 80 for args.image_size = 64 ????
+            # torchvision.transforms.RandomResizedCrop(args.image_size, scale=(0.8, 1.0)),
             torchvision.transforms.ToTensor(),
             torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])

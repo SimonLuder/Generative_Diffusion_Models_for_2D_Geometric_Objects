@@ -76,9 +76,6 @@ def main():
                               device=device,
                           )
     
-    # logger = SummaryWriter(os.path.join("runs", args.run_name))
-
-    
     for epoch in range(from_epoch, args.epochs):
         print(f"Starting epoch {epoch}:")
 
@@ -112,7 +109,6 @@ def main():
             optimizer.step()
 
             pbar.set_postfix(MSE=loss.item())
-            # logger.add_scalar("MSE", loss.item(), global_step=epoch * l + i)
 
         log_data["epoch_loss"] = epoch_loss
 
@@ -159,10 +155,10 @@ def main():
                             }
                     wandb_log_table.add_data(result)
 
-                save_images_batch(predicted_images, 
-                                  filenames=filenames, 
-                                  save_dir=save_dir,
-                                  )
+                # save_images_batch(predicted_images, 
+                #                   filenames=filenames, 
+                #                   save_dir=save_dir,
+                #                   )
                 
                 total_iou += torch.nansum(iou).item()
                 total_cdist += torch.nansum(cdist).item()
@@ -175,7 +171,7 @@ def main():
             log_data["mean_cdist"] = total_cdist / n
    
                 
-        run.log(data=log_data, step=epoch+1)
+        run.log(data=log_data, step=epoch)
 
         # save latest model
         torch.save(model.state_dict(), os.path.join("models", args.run_name, f"model_latest.pt"))
@@ -195,7 +191,7 @@ if __name__ == "__main__":
 
     # ===========================================Run Settings=============================================
     parser.add_argument("--project", type=str, default=f"MSE_P7")
-    parser.add_argument("--run_name", type=str, default=f"2D_GeoShape_128_linear_clip_{time.time():.0f}")
+    parser.add_argument("--run_name", type=str, default=f"2D_GeoShape_32_linear_clip_{time.time():.0f}")
 
 
     # ===========================================Base Settings============================================
