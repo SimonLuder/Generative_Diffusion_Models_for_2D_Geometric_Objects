@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 def get_activation_function(name="silu", inplace=False):
     """
     Get activation function
@@ -54,27 +55,54 @@ class EMA:
         ema_model.load_state_dict(model.state_dict())
 
 
+# class SelfAttention(nn.Module):
+#     def __init__(self, channels, size, act="silu"):
+#         super(SelfAttention, self).__init__()
+#         self.channels = channels
+#         self.size = size
+#         self.mha = nn.MultiheadAttention(embed_dim=channels, num_heads=4, batch_first=True)
+#         self.ln = nn.LayerNorm(normalized_shape=[channels])
+#         self.ff_self = nn.Sequential(
+#             nn.LayerNorm(normalized_shape=[channels]),
+#             nn.Linear(in_features=channels, out_features=channels),
+#             get_activation_function(name=act),
+#             nn.Linear(in_features=channels, out_features=channels),
+#         )
+
+#     def forward(self, x):
+#         print("in", x.shape)
+#         B, C, W, H = x.size()
+#         x = x.view(B, -1, self.size * self.size).swapaxes(1, 2)
+#         x_ln = self.ln(x)
+#         attention_value, _ = self.mha(x_ln, x_ln, x_ln)
+#         attention_value = attention_value + x
+#         attention_value = self.ff_self(attention_value) + attention_value
+#         attention_value = attention_value.swapaxes(1, 2).view(B, -1, self.size, self.size)
+#         print("out", attention_value.shape)
+#         return attention_value
+    
+
 class SelfAttention(nn.Module):
-    def __init__(self, channels, size, act="silu"):
+    def __init__(self, channels):
         super(SelfAttention, self).__init__()
-        self.channels = channels
-        self.size = size
-        self.mha = nn.MultiheadAttention(embed_dim=channels, num_heads=4, batch_first=True)
-        self.ln = nn.LayerNorm(normalized_shape=[channels])
-        self.ff_self = nn.Sequential(
-            nn.LayerNorm(normalized_shape=[channels]),
-            nn.Linear(in_features=channels, out_features=channels),
-            get_activation_function(name=act),
-            nn.Linear(in_features=channels, out_features=channels),
-        )
+        self.query_conv = nn.Conv2d(channels, channels//8, kernel_size=1)
+        self.key_conv = nn.Conv2d(channels, channels//8, kernel_size=1)
+        self.value_conv = nn.Conv2d(channels, channels, kernel_size=1)
+        self.gamma = nn.Parameter(torch.zeros(1))
 
     def forward(self, x):
-        x = x.view(-1, self.channels, self.size * self.size).swapaxes(1, 2)
-        x_ln = self.ln(x)
-        attention_value, _ = self.mha(x_ln, x_ln, x_ln)
-        attention_value = attention_value + x
-        attention_value = self.ff_self(attention_value) + attention_value
-        return attention_value.swapaxes(2, 1).view(-1, self.channels, self.size, self.size)
+        B, C, W, H = x.size()
+        query = self.query_conv(x).view(B, -1, W*H).permute(0, 2, 1)
+        key = self.key_conv(x).view(B, -1, W*H)
+        value = self.value_conv(x).view(B, -1, W*H)
+
+        raw_attention = torch.bmm(query, key)
+        attention = torch.softmax(raw_attention, dim=-1)
+
+        out = torch.bmm(value, attention.permute(0, 2, 1))
+        out = out.view(B, C, W, H)
+        out = self.gamma*out + x
+        return out
 
 
 class DoubleConv(nn.Module):
