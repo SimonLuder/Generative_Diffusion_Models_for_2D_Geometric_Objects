@@ -2,6 +2,8 @@ import os
 import yaml
 from PIL import Image
 from matplotlib import pyplot as plt
+from pathlib import Path
+import json
 
 import torch
 import torchvision
@@ -45,18 +47,10 @@ def save_images_batch(images, filenames, save_dir):
                     or a list of images all of the same size.
     filenames (str): filename from the batch.
     """
-    # # Normalize the images to [0, 1]
-
-    # images = (images - images.min()) / (images.max() - images.min())
-
-    # # Convert the images to 'torch.uint8'
-    # images = (images * 255).byte()
-
     for image, filename in zip(images, filenames):
         image = torchvision.transforms.ToPILImage()(image)
         filename = os.path.join(save_dir, os.path.basename(filename))
         image.save(filename)
-        # torchvision.utils.save_image(image, filename)
 
 
 def get_dataloader(args):
@@ -88,9 +82,14 @@ def initialize_model_weights(model, weight_path, device):
     model_weights_dict = torch.load(f=weight_path, map_location=device)
     model.load_state_dict(model_weights_dict)
 
-
 def yaml_load_config(config_path):
     if config_path:
         with open(config_path, 'r') as file:
             config = yaml.safe_load(file)
         return config
+    
+def save_as_json(data_dict, filepath):
+    path, _ = os.path.split(filepath)
+    Path(path).mkdir( parents=True, exist_ok=True )
+    with open(filepath, "w") as file:
+        json.dump(data_dict, file)

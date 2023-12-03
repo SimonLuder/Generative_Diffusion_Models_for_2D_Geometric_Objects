@@ -15,16 +15,21 @@ import clip
 from model.UNet import UNet
 from model.ddpm import Diffusion as DDPMDiffusion
 from utils.wandb import WandbManager, WandbTable, wandb_image
-from utils.train_utils import setup, get_dataloader, save_images_batch, initialize_model_weights
-from metrics import iou_pytorch, center_distance_pytorch
-
+from utils.train_test_utils import setup, get_dataloader, initialize_model_weights, save_as_json
+from test import eval_loop
 
 def main():
+    print(f"Starting run: {args.run_name}")
+    # save config from this run in 
+    save_as_json(vars(args), f"runs/{args.run_name}/config.json")
+
+    # local logging
+    local_logs = list()
 
     # Setup WandbManager
     wandb_manager = WandbManager(vars(args))
     # init run
-    run = wandb_manager.init()
+    run = wandb_manager.get_run()
 
     # setup logging
     setup(args)
@@ -33,12 +38,15 @@ def main():
     device = args.device
     
     # load model
-    model = UNet(image_size=args.image_size, 
-                 cfg_encoding=args.cfg_encoding,
-                 num_classes=args.num_classes,
-                 device=device,
-                 act=args.act,
-                 ).to(device)
+    if args.model == "unet_base":
+        model = UNet(image_size=args.image_size, 
+                    cfg_encoding=args.cfg_encoding,
+                    num_classes=args.num_classes,
+                    device=args.device,
+                    act=args.act,
+                    ).to(device)
+    else:
+        print(f'"{args.model}" model not implemented')
     
     print(f'Parameters (total): {sum(p.numel() for p in model.parameters()):_d}')
     print(f'Parameters (train): {sum(p.numel() for p in model.parameters() if p.requires_grad):_d}')
@@ -58,7 +66,7 @@ def main():
         initialize_model_weights(model=model, weight_path=model_path, device=args.device)
         
         optim_path = os.path.join(args.load_model_dir, f"optim_{from_epoch}.pt" )
-        optim_weight_dict = torch.load(f=optim_path, map_location=device)
+        optim_weight_dict = torch.load(f=optim_path, map_location=args.device)
         optimizer.load_state_dict(state_dict=optim_weight_dict)
     else:
         from_epoch = 0
@@ -73,14 +81,14 @@ def main():
                               beta_start=args.beta_start, 
                               beta_end=args.beta_end,
                               s=args.s,
-                              device=device,
+                              device=args.device,
                           )
     
     for epoch in range(from_epoch, args.epochs):
         print(f"Starting epoch {epoch}:")
 
-        log_data=dict()
-        log_data["epoch"] = epoch
+        log_data={"train": dict()}
+        log_data["train"]["epoch"] = epoch
         
         epoch_loss = 0
         pbar = tqdm(dataloader["train"])
@@ -110,78 +118,62 @@ def main():
 
             pbar.set_postfix(MSE=loss.item())
 
-        log_data["epoch_loss"] = epoch_loss
+        log_data["train"]["epoch_loss"] = epoch_loss
 
         # validation loop
         if epoch % args.val_interval == 0:
+
+            model.eval()
     
-            save_dir = f"results/{args.run_name}/{epoch}"
+            save_dir = f"runs/{args.run_name}/validation/{epoch}"
             Path( save_dir ).mkdir( parents=True, exist_ok=True )
 
-            wandb_log_table = WandbTable()
+            log_data["val"] = eval_loop(dataloader=dataloader["val"], 
+                                        model=model, 
+                                        diffusion=diffusion, 
+                                        save_dir=save_dir,
+                                        args=args,
+                                        )
 
-            total_iou = 0
-            total_cdist = 0
-            n = 0
+            # log to wandb
+            df_samples = pd.DataFrame.from_dict(log_data["val"]["samples"])
+            df_samples["img_original"] = df_samples["path_original"].apply(
+                lambda x: wandb_image(path = x ))
+            df_samples["img_generated"] = df_samples["path_generated"].apply(
+                lambda x: wandb_image(path = os.path.join( save_dir, x )))
+            df_samples["epoch"] = epoch
+            wandb_manager.log_dataframe( "validation_samples", df_samples)
 
-            pbar = tqdm(dataloader["val"])
-            for (images, condition, filenames) in pbar:
-
-                raw_condition = condition
-                
-                if args.cfg_encoding == "class":
-                    condition = torch.arange(0, args.num_classes, 1)
-
-                # apply clip tokenization
-                if args.cfg_encoding == "clip":
-                    condition = clip.tokenize(condition)
-
-                images = images.to(device)
-                condition = condition.to(device)
-
-                predicted_images = diffusion.sample(model, condition=condition)
-
-                iou = iou_pytorch(images, predicted_images).cpu()
-                cdist = center_distance_pytorch(images, predicted_images).cpu()
-
-                for ixd in range(images.shape[0]):
-                    result= {"true_image":wandb_image(images[ixd].cpu().numpy()), 
-                            "generated_image":wandb_image(predicted_images[ixd].cpu().numpy()),
-                            "condition":raw_condition[ixd],
-                            "IoU":iou[ixd].item(), 
-                            "l2_distance":cdist[ixd].item(), 
-                            "epoch":epoch,
-                            "filename":filenames[ixd]
-                            }
-                    wandb_log_table.add_data(result)
-
-                # save_images_batch(predicted_images, 
-                #                   filenames=filenames, 
-                #                   save_dir=save_dir,
-                #                   )
-                
-                total_iou += torch.nansum(iou).item()
-                total_cdist += torch.nansum(cdist).item()
-                n += len(images)
-
- 
-            run.log(data={"validation_results": wandb_log_table.get_table()})
-
-            log_data["mean_iou"] = total_iou / n
-            log_data["mean_cdist"] = total_cdist / n
+            model.train()
    
-                
-        run.log(data=log_data, step=epoch)
+        save_as_json(local_logs, f"runs/{args.run_name}/metrics.json")
+        run.log(data=log_data)
+
 
         # save latest model
-        torch.save(model.state_dict(), os.path.join("models", args.run_name, f"model_latest.pt"))
-        torch.save(optimizer.state_dict(), os.path.join("models", args.run_name, f"optim_latest.pt"))
+        model_path = os.path.join("runs/", args.run_name, "models", "latest",  "model.pt")
+        # optim_path = os.path.join("runs/", args.run_name, "models", "latest", "optim.pt")
+        Path(os.path.split(model_path)[0]).mkdir( parents=True, exist_ok=True )
+        # Path(os.path.split(optim_path)[0]).mkdir( parents=True, exist_ok=True )
+        torch.save(model.state_dict(), model_path)
+        # torch.save(optimizer.state_dict(), optim_path)
 
         # save model periodically
         if args.create_checkpoints and epoch % args.checkpoints_interval == 0:
-            torch.save(model.state_dict(), os.path.join("models", args.run_name, f"model_{epoch}.pt"))
-            torch.save(optimizer.state_dict(), os.path.join("models", args.run_name, f"optim_{epoch}.pt"))
+            model_path = os.path.join("runs/", args.run_name, "models", str(epoch),  "model.pt")
+            # optim_path = os.path.join("runs/", args.run_name, "models", str(epoch), "optim.pt")
+            Path(os.path.split(model_path)[0]).mkdir( parents=True, exist_ok=True )
+            # Path(os.path.split(optim_path)[0]).mkdir( parents=True, exist_ok=True )
+            torch.save(model.state_dict(), model_path)
+            # torch.save(optimizer.state_dict(), optim_path)
+            # wandb_manager.log_torch_model(name=f"{args.run_name}", 
+            #                               path=model_path,
+            #                               aliases=[f"ep{epoch}"],
+            #                               config=vars(args)
+            #                               )
 
+    wandb_manager.log_everything(run_name=args.run_name, path=f"runs/{args.run_name}")
+            
 
 
 if __name__ == "__main__":
@@ -193,10 +185,10 @@ if __name__ == "__main__":
     parser.add_argument("--project", type=str, default=f"MSE_P7")
     parser.add_argument("--run_name", type=str, default=f"2D_GeoShape_32_linear_clip_{time.time():.0f}")
 
-
     # ===========================================Base Settings============================================
+    parser.add_argument("--model", type=str, default="unet_base")
     # Total epochs for training
-    parser.add_argument("--epochs", type=int, default=500)
+    parser.add_argument("--epochs", type=int, default=10)
     # Batch size for training
     parser.add_argument("--batch_size", type=int, default=8)
     # Input image size
@@ -227,8 +219,8 @@ if __name__ == "__main__":
     parser.add_argument("--val_images", type=str, default="./data/test32/images/")
 
     # Only relevant if cfg_encoding is "clip"
-    parser.add_argument("--train_labels", type=str, default="data/train32/labels_20.csv")
-    parser.add_argument("--val_labels", type=str, default="data/test32/labels_2.csv")
+    parser.add_argument("--train_labels", type=str, default="./data/train32/labels_20.csv")
+    parser.add_argument("--val_labels", type=str, default="./data/test32/labels_2.csv")
 
     # ===========================================Validation===============================================
     parser.add_argument("--val_interval", type=int, default=50)
@@ -244,8 +236,7 @@ if __name__ == "__main__":
     # Set if model checkpoints are saved
     parser.add_argument("--create_checkpoints", type=bool, default=True)
     # Set per how many epochs a model checkpoint is created
-    parser.add_argument("--checkpoints_interval", type=int, default=100)
-
+    parser.add_argument("--checkpoints_interval", type=int, default=25)
 
     # ===========================================Resume Training===========================================
     parser.add_argument("--resume", type=bool, default=False)

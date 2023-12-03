@@ -5,15 +5,28 @@ import numpy as np
 class WandbManager:
     def __init__(self, config):
         self.config = config
-        self.run = None
-
-    def init(self):
         self.run = wandb.init(project=self.config['project'], 
                               name=self.config['run_name'], 
                               config=self.config)
-        return self.run
     
+    def get_run(self):
+        return self.run
+        
+    def log_torch_model(self, name, path, aliases, config):
+        artifact = wandb.Artifact(name=name, type='model', metadata=dict(config))
+        artifact.add_file(path)
+        self.run.log_artifact(artifact, aliases=aliases)
 
+    def log_everything(self, run_name, path):
+        artifact = wandb.Artifact(name=run_name, type='everything')
+        artifact.add_dir(path)
+        self.run.log_artifact(artifact)
+
+    def log_dataframe(self, name, df):
+        table = wandb.Table(dataframe=df)
+        self.run.log({name: table})
+
+    
 class WandbTable:
     """
     Example:
@@ -43,9 +56,19 @@ class WandbTable:
             self.table.add_data(*row)
         return self.table
 
-def wandb_image(img):
-    if img.shape[0] == 3:
-        img = np.transpose(img, (1, 2, 0))
+# def wandb_image(img):
+#     if img.shape[0] == 3:
+#         img = np.transpose(img, (1, 2, 0))
+#     img = wandb.Image(img)
+#     return img
 
-    img = wandb.Image(img)
+def wandb_image(path):
+    img = wandb.Image(path)
     return img
+
+
+
+def download_everything(entity, project, name):
+    api = wandb.Api()
+    artifact = api.artifact(f'{entity}/{project}/{name}:latest', type='everything')
+    artifact.download(f'runs/{name}')
