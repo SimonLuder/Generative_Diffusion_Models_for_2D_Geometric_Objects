@@ -11,7 +11,7 @@ from torch import optim
 
 
 class Diffusion:
-    def __init__(self, img_size=256, noise_schedule="linear", noise_steps=1000, beta_start=1e-4, beta_end=0.02, s=0.008, device="cuda"):
+    def __init__(self, img_size=256, noise_schedule="linear", noise_steps=1000, beta_start=1e-4, beta_end=0.02, s=0.008, device="cpu"):
         self.img_size = img_size
         self.noise_schedule = noise_schedule
         self.noise_steps = noise_steps
@@ -65,6 +65,7 @@ class Diffusion:
 
     def sample(self, model, condition, cfg_scale=3):
         n = len(condition)
+        condition=condition
         model.eval()
         with torch.no_grad():
             x = torch.randn((n, 3, self.img_size, self.img_size)).to(self.device)

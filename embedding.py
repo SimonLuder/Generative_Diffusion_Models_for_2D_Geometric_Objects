@@ -47,7 +47,7 @@ class CLIPTextEmbedding(nn.Module):
     def forward(self, x:torch.Tensor) -> torch.Tensor:
         # we only want to train the fully connected layers without clip
         with torch.no_grad():
-            x = self.clip_encoder.encode_text(x)
+            x = self.clip_encoder.encode_text(x).type(torch.float32)
         emb = self.fully_connected(x)
         return emb
     

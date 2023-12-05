@@ -90,7 +90,7 @@ class UNet(nn.Module):
             self.label_emb = ConditionalClassEmbedding(num_embeddings=num_classes, embedding_dim=time_channel, out_dim=time_channel)
         elif cfg_encoding == "clip":
             # self.label_emb = nn.Embedding(num_embeddings=num_classes, embedding_dim=time_channel)
-            self.label_emb = CLIPTextEmbedding(out_dim=time_channel)
+            self.label_emb = CLIPTextEmbedding(out_dim=time_channel, device=device)
 
     def pos_encoding(self, time, channels):
         """
@@ -115,7 +115,7 @@ class UNet(nn.Module):
         :return: output
         """
         time = time.unsqueeze(-1).type(torch.float)
-        time = self.pos_encoding(time, self.time_channel)
+        time = self.pos_encoding(time, self.time_channel).to(self.device)
 
         if y is not None:
             time += self.label_emb(y)
