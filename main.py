@@ -31,8 +31,8 @@ def main():
     # init run
     run = wandb_manager.get_run()
 
-    # setup logging
-    setup(args)
+    # # setup logging
+    # setup(args)
 
     # get device 
     device = args.device
@@ -121,7 +121,7 @@ def main():
         log_data["train"]["epoch_loss"] = epoch_loss
 
         # validation loop
-        if epoch % args.val_interval == 0:
+        if args.val_interval > 0 and epoch % args.val_interval == 0:
 
             model.eval()
     
@@ -134,20 +134,21 @@ def main():
                                         save_dir=save_dir,
                                         args=args,
                                         )
+            log_data["val"]["epoch"] = epoch
 
             # log to wandb
             df_samples = pd.DataFrame.from_dict(log_data["val"]["samples"])
-            df_samples["img_original"] = df_samples["path_original"].apply(
-                lambda x: wandb_image(path = x ))
-            df_samples["img_generated"] = df_samples["path_generated"].apply(
-                lambda x: wandb_image(path = os.path.join( save_dir, x )))
+            df_samples["img_original"] = df_samples["path_original"].apply(lambda x: wandb_image(path = x))
+            df_samples["img_generated"] = df_samples["path_generated"].apply(lambda x: wandb_image(path = x))
             df_samples["epoch"] = epoch
             wandb_manager.log_dataframe( "validation_samples", df_samples)
 
             model.train()
    
-        save_as_json(local_logs, f"runs/{args.run_name}/metrics.json")
+        
         run.log(data=log_data)
+        local_logs.append(log_data)
+        save_as_json(local_logs, f"runs/{args.run_name}/metrics.json")
 
 
         # save latest model
@@ -216,20 +217,22 @@ if __name__ == "__main__":
     # ===========================================Dataset==================================================
     # Set path to folder where images are located
     parser.add_argument("--train_images", type=str, default="./data/train32/images/")
-    parser.add_argument("--val_images", type=str, default="./data/test32/images/")
+    parser.add_argument("--val_images", type=str, default="./data/val32/images/")
+    parser.add_argument("--test_images", type=str, default="./data/test32/images/")
 
     # Only relevant if cfg_encoding is "clip"
     parser.add_argument("--train_labels", type=str, default="./data/train32/labels_20.csv")
-    parser.add_argument("--val_labels", type=str, default="./data/test32/labels_2.csv")
+    parser.add_argument("--val_labels", type=str, default="./data/val32/labels.csv")
+    parser.add_argument("--test_labels", type=str, default="./data/test32/labels.csv")
 
     # ===========================================Validation===============================================
-    parser.add_argument("--val_interval", type=int, default=50)
+    parser.add_argument("--val_interval", type=int, default=0)
 
     # ===========================================Conditioning=============================================
     # If conditional generation is trained 
     parser.add_argument("--cfg_encoding", type=str, default="clip")
     # only relevant if cfg_encoding is set to "classes"
-    parser.add_argument("--num_classes", type=int, default=9)
+    parser.add_argument("--num_classes", type=int, default=None)
   
 
     # ===========================================Training Checkpoints======================================

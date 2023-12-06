@@ -84,7 +84,7 @@ def eval_loop(dataloader, model, diffusion, save_dir, args):
 
         for ixd in range(images.shape[0]):
             sample = {"path_original":filenames[ixd],
-                      "path_generated":os.path.basename(filenames[ixd]),
+                      "path_generated":os.path.join(save_dir, os.path.basename(filenames[ixd])),
                       "condition":raw_condition[ixd],
                       "IoU":iou[ixd].item(), 
                       "l2_distance":cdist[ixd].item(), 
