@@ -15,8 +15,9 @@ import clip
 from model.UNet import UNet
 from model.ddpm import Diffusion as DDPMDiffusion
 from utils.wandb import WandbManager, WandbTable, wandb_image
-from utils.train_test_utils import setup, get_dataloader, initialize_model_weights, save_as_json
+from utils.train_test_utils import get_dataloader, initialize_model_weights, save_as_json
 from test import eval_loop
+
 
 def main():
     print(f"Starting run: {args.run_name}")
@@ -31,17 +32,17 @@ def main():
     # init run
     run = wandb_manager.get_run()
 
-    # # setup logging
-    # setup(args)
-
     # get device 
     device = args.device
     
     # load model
     if args.model == "unet_base":
         model = UNet(image_size=args.image_size, 
+                    in_channel=args.image_channels,
+                    out_channel=args.image_channels,
                     cfg_encoding=args.cfg_encoding,
                     num_classes=args.num_classes,
+                    cfg_model_name=args.encoder_model,
                     device=args.device,
                     act=args.act,
                     ).to(device)
@@ -75,8 +76,10 @@ def main():
     dataloader = get_dataloader(args)
 
     mse = nn.MSELoss()
+    
 
     diffusion = DDPMDiffusion(img_size=args.image_size, 
+                              img_channels=args.image_channels,
                               noise_schedule=args.noise_schedule, 
                               beta_start=args.beta_start, 
                               beta_end=args.beta_end,
@@ -93,10 +96,6 @@ def main():
         epoch_loss = 0
         pbar = tqdm(dataloader["train"])
         for i, (images, condition, _) in enumerate(pbar):
-            
-            # apply clip tokenization
-            if args.cfg_encoding == "clip":
-                condition = clip.tokenize(condition)
 
             images = images.to(device)
             condition = condition.to(device)
@@ -105,8 +104,10 @@ def main():
             x_t, noise = diffusion.noise_images(images, t)
 
             # set propoportion of conditions to zero
-            if args.num_classes is None or np.random.random() < 0.1:
+            if args.cfg_encoding is None or np.random.random() < 0.1:
                 condition = None
+            else:
+                pass
 
             predicted_noise = model(x=x_t, time=t, y=condition)
             loss = mse(noise, predicted_noise)
@@ -119,9 +120,10 @@ def main():
             pbar.set_postfix(MSE=loss.item())
 
         log_data["train"]["epoch_loss"] = epoch_loss
+        log_data["train"]["time"] = time.time()
 
         # validation loop
-        if args.val_interval > 0 and epoch % args.val_interval == 0:
+        if args.val_interval > 0 and ((epoch % args.val_interval == 0) or (epoch + 1 == args.epochs)):
 
             model.eval()
     
@@ -135,6 +137,7 @@ def main():
                                         args=args,
                                         )
             log_data["val"]["epoch"] = epoch
+            log_data["val"]["time"] = time.time()
 
             # log to wandb
             df_samples = pd.DataFrame.from_dict(log_data["val"]["samples"])
@@ -160,7 +163,7 @@ def main():
         # torch.save(optimizer.state_dict(), optim_path)
 
         # save model periodically
-        if args.create_checkpoints and epoch % args.checkpoints_interval == 0:
+        if args.create_checkpoints and ((epoch % args.checkpoints_interval == 0) or (epoch + 1 == args.epochs)):
             model_path = os.path.join("runs/", args.run_name, "models", str(epoch),  "model.pt")
             # optim_path = os.path.join("runs/", args.run_name, "models", str(epoch), "optim.pt")
             Path(os.path.split(model_path)[0]).mkdir( parents=True, exist_ok=True )
@@ -175,25 +178,26 @@ def main():
 
     wandb_manager.log_everything(run_name=args.run_name, path=f"runs/{args.run_name}")
             
-
+    
 
 if __name__ == "__main__":
 
     # config
     parser = argparse.ArgumentParser()
-
     # ===========================================Run Settings=============================================
     parser.add_argument("--project", type=str, default=f"MSE_P7")
-    parser.add_argument("--run_name", type=str, default=f"2D_GeoShape_32_linear_clip_{time.time():.0f}")
+    parser.add_argument("--run_name", type=str, default=None)
 
     # ===========================================Base Settings============================================
     parser.add_argument("--model", type=str, default="unet_base")
     # Total epochs for training
     parser.add_argument("--epochs", type=int, default=10)
     # Batch size for training
-    parser.add_argument("--batch_size", type=int, default=8)
+    parser.add_argument("--batch_size", type=int, default=12)
     # Input image size
     parser.add_argument("--image_size", type=int, default=32)
+    # Image channels
+    parser.add_argument("--image_channels", type=int, default=1)
     # Set noise schedule
     # Options: linear, cosine
     parser.add_argument("--noise_schedule", type=str, default="linear")
@@ -221,16 +225,18 @@ if __name__ == "__main__":
     parser.add_argument("--test_images", type=str, default="./data/test32/images/")
 
     # Only relevant if cfg_encoding is "clip"
-    parser.add_argument("--train_labels", type=str, default="./data/train32/labels_20.csv")
+    parser.add_argument("--train_labels", type=str, default="./data/train32/labels.csv")
     parser.add_argument("--val_labels", type=str, default="./data/val32/labels.csv")
     parser.add_argument("--test_labels", type=str, default="./data/test32/labels.csv")
 
     # ===========================================Validation===============================================
-    parser.add_argument("--val_interval", type=int, default=0)
+    parser.add_argument("--val_interval", type=int, default=25)
 
     # ===========================================Conditioning=============================================
     # If conditional generation is trained 
-    parser.add_argument("--cfg_encoding", type=str, default="clip")
+    parser.add_argument("--cfg_encoding", type=str, default="clip_text")
+    # only relevant if cfg_encoding is set to "clip_image" or "clip_text"
+    parser.add_argument("--encoder_model", type=str, default="ViT-B/32")
     # only relevant if cfg_encoding is set to "classes"
     parser.add_argument("--num_classes", type=int, default=None)
   
@@ -247,5 +253,9 @@ if __name__ == "__main__":
     parser.add_argument("--load_model_dir", type=str, default="")
 
     args = parser.parse_args()
+
+    # set default run name if nothing else is specified
+    if args.run_name is None:
+        args.run_name = f"2D_GeoShape_{args.image_size}_{args.noise_schedule}_{args.cfg_encoding}_{time.time():.0f}"
 
     main()

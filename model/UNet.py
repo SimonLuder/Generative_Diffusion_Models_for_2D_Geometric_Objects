@@ -2,15 +2,15 @@ import torch
 import torch.nn as nn
 
 from modules import UpBlock, DownBlock, DoubleConv, SelfAttention
-from embedding import ConditionalClassEmbedding, CLIPTextEmbedding
+from embedding import ConditionalClassEmbedding, CLIPTextEmbedding, TabularEmbedding, CLIPImageEmbedding
 
 class UNet(nn.Module):
     """
     UNet
     """
 
-    def __init__(self, in_channel=3, out_channel=3, channel=None, time_channel=256, cfg_encoding="classes", num_classes=None, image_size=64,
-                 device="cpu", act="silu"):
+    def __init__(self, in_channel=3, out_channel=3, channel=None, time_channel=256, cfg_encoding="classes", 
+                 input_dim=14, num_classes=None, cfg_model_name="ViT-B/32", image_size=64, device="cpu", act="silu"):
         """
         Initialize the UNet network
         :param in_channel: Input channel
@@ -18,7 +18,9 @@ class UNet(nn.Module):
         :param channel: The list of channel
         :param time_channel: Time channel
         :param cfg_encoding: "classes" or "clip"
-        :param num_classes: Number of classes
+        :param num_classes: Number of classes (only required if cfg_encoding="classes")
+        :param input_dim: Input feature vector length (only required if cfg_encoding="tabular")
+        :param cfg_model_name: Encoder model name (only required if cfg_encoding="clip_image" or cfg_encoding="clip_text")
         :param image_size: Adaptive image size
         :param device: Device type
         :param act: Activation function
@@ -88,9 +90,13 @@ class UNet(nn.Module):
         if cfg_encoding == "classes" and num_classes is not None:
             # self.label_emb = nn.Embedding(num_embeddings=num_classes, embedding_dim=time_channel)
             self.label_emb = ConditionalClassEmbedding(num_embeddings=num_classes, embedding_dim=time_channel, out_dim=time_channel)
-        elif cfg_encoding == "clip":
-            # self.label_emb = nn.Embedding(num_embeddings=num_classes, embedding_dim=time_channel)
-            self.label_emb = CLIPTextEmbedding(out_dim=time_channel, device=device)
+        elif cfg_encoding == "tabular":
+            self.label_emb = TabularEmbedding(input_dim=input_dim, out_dim=time_channel)
+        elif cfg_encoding == "clip_text":
+            self.label_emb = CLIPTextEmbedding(out_dim=time_channel, model_name=cfg_model_name, device=device)
+        elif cfg_encoding == "clip_image":
+            self.label_emb = CLIPImageEmbedding(out_dim=time_channel, model_name=cfg_model_name, device=device)
+        
 
     def pos_encoding(self, time, channels):
         """
@@ -151,5 +157,4 @@ if __name__ == "__main__":
     x = torch.randn(1, 3, 128, 128)
     t = x.new_tensor([500] * x.shape[0]).long()
     y = x.new_tensor([1] * x.shape[0]).long()
-    print(net(x, t).shape)
-    # print(net(x, t, y).shape)
+    print(net(x, t, y).shape)

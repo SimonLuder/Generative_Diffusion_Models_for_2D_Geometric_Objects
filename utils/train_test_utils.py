@@ -9,7 +9,9 @@ import torch
 import torchvision
 from torch.utils.data import DataLoader
 
-from dataset import ImageSentenceDataset
+import clip
+
+from dataset import ImageSentenceDataset, ImageTabularDataset, ImageImageDataset
 
 
 # def setup(args):
@@ -48,19 +50,25 @@ def save_images_batch(images, filenames, save_dir):
     filenames (str): filename from the batch.
     """
     for image, filename in zip(images, filenames):
-        print(image.shape)
         image = torchvision.transforms.ToPILImage()(image)
         filename = os.path.join(save_dir, os.path.basename(filename))
         image.save(filename)
 
 
 def get_dataloader(args):
-    transforms = torchvision.transforms.Compose([
-            # torchvision.transforms.Resize(80),  # args.image_size + 1/4 *args.image_size 80 for args.image_size = 64 ????
-            # torchvision.transforms.RandomResizedCrop(args.image_size, scale=(0.8, 1.0)),
-            torchvision.transforms.ToTensor()
-            # torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-        ])
+
+    if args.image_channels == 3:
+        transforms = torchvision.transforms.Compose([
+                torchvision.transforms.ToTensor(),
+                torchvision.transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+                ])
+    elif args.image_channels == 1:
+        transforms = torchvision.transforms.Compose([
+            torchvision.transforms.Grayscale(num_output_channels=1),
+            torchvision.transforms.ToTensor(),
+            torchvision.transforms.Normalize((0.5), (0.5))
+            ])
+    
 
     if args.cfg_encoding == None or args.cfg_encoding == "classes":
         print("Loading ImageFolder")
@@ -72,15 +80,43 @@ def get_dataloader(args):
         if vars(args).get("test_images"):
             test_dataset  = torchvision.datasets.ImageFolder(root=args.test_images, transform=transforms)
 
-    if args.cfg_encoding == "clip":
-        print("Loading ImageSentenceDataset")
+    if args.cfg_encoding == "tabular":
+        
+        print("Loading ImageTabularDataset")
 
         if vars(args).get("train_images"):
-            train_dataset = ImageSentenceDataset(labels_path=args.train_labels, transform=transforms)
+            train_dataset = ImageTabularDataset(labels_path=args.train_labels, transform=transforms)
         if vars(args).get("val_images"):
-            val_dataset   = ImageSentenceDataset(labels_path=args.val_labels, transform=transforms)
+            val_dataset   = ImageTabularDataset(labels_path=args.val_labels, transform=transforms)
         if vars(args).get("test_images"):
-            test_dataset  = ImageSentenceDataset(labels_path=args.test_labels, transform=transforms)
+            test_dataset  = ImageTabularDataset(labels_path=args.test_labels, transform=transforms)
+
+    if args.cfg_encoding == "clip_text":
+
+        print("Loading ImageSentenceDataset")
+
+        preprocess = lambda x: clip.tokenize(x)[0]
+
+        if vars(args).get("train_images"):
+            train_dataset = ImageSentenceDataset(labels_path=args.train_labels, transform=transforms, preprocess=preprocess)
+        if vars(args).get("val_images"):
+            val_dataset   = ImageSentenceDataset(labels_path=args.val_labels, transform=transforms, preprocess=preprocess)
+        if vars(args).get("test_images"):
+            test_dataset  = ImageSentenceDataset(labels_path=args.test_labels, transform=transforms, preprocess=preprocess)
+
+    if args.cfg_encoding == "clip_image":
+
+        print("Loading ImageImageDataset")
+
+        _, preprocessor = clip.load(args.encoder_model, device=args.device)
+        preprocess = lambda img: preprocessor(img)
+
+        if vars(args).get("train_images"):
+            train_dataset = ImageImageDataset(labels_path=args.train_labels, transform=transforms, preprocess=preprocess)
+        if vars(args).get("val_images"):
+            val_dataset   = ImageImageDataset(labels_path=args.val_labels, transform=transforms, preprocess=preprocess)
+        if vars(args).get("test_images"):
+            test_dataset  = ImageImageDataset(labels_path=args.test_labels, transform=transforms, preprocess=preprocess)
 
     dataloader = dict()
     if vars(args).get("train_images"):
