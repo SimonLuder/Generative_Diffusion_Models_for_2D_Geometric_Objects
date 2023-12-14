@@ -1,4 +1,5 @@
 import numpy as np
+import torchvision
 import torch
 import clip
 
@@ -57,18 +58,17 @@ def iou_pytorch(outputs: torch.Tensor, labels: torch.Tensor, threshold: float = 
     Returns:
     Tensor: IoU for each image in the batch.
     """
-    # # Convert RGB images to grayscale
-    # outputs_gray = outputs.mean(dim=1)
-    # labels_gray = labels.mean(dim=1)
+
+    smooth = 1e-5
 
     # Convert grayscale images to binary masks
     outputs_bin = (outputs > threshold)
     labels_bin = (labels > threshold)
 
-    intersection = (outputs_bin & labels_bin).sum((1, 2, 3))  # Will be zero if Truth=0 or Prediction=0
+    intersection = (outputs_bin & labels_bin).sum((1, 2, 3))  # Will be zero if Truth=0, Prediction=0 or no overlap
     union = (outputs_bin | labels_bin).sum((1, 2, 3))         # Will be zero if both are 0
 
-    iou = intersection / union  # We smooth our division to avoid 0/0
+    iou = (intersection + smooth) / union + smooth # We smooth our division to avoid 0/0
 
     return iou
 
@@ -186,3 +186,30 @@ def binary_iou(image1, image2, treshold=0.5):
     iou = np.sum(intersection) / np.sum(union)
 
     return iou
+
+
+def center_shapes(images: torch.Tensor, treshold=0.5):
+    """
+    Center the shapes in binary images.
+
+    Parameters:
+    images (Tensor): a 4D mini-batch Tensor of shape (B x C x H x W) 
+                    or a list of binary images all of the same size.
+
+    Returns:
+    Tensor: Images with centered shapes.
+    """
+    imgs = torch.clone(images)
+    B, C, H, W = images.shape
+    centers = batch_center_of_mass(imgs)
+    centers[:,0] = (H-1) / 2 - centers[:,0]
+    centers[:,1] = (W-1) / 2 - centers[:,1] 
+    centers = torch.round(centers).int()
+ 
+    for idx, image in enumerate(images):
+        images[idx,:,:,:] = torchvision.transforms.functional.affine(image, 
+                                                        translate = (centers[idx][1], centers[idx][0]),
+                                                        angle=0,
+                                                        scale=1,
+                                                        shear=0)
+    return images

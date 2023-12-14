@@ -7,7 +7,7 @@ from pathlib import Path
 
 import torch
 
-from metrics import iou_pytorch, center_distance_pytorch
+from metrics import iou_pytorch, center_distance_pytorch, center_shapes
 from utils.train_test_utils import get_dataloader, save_images_batch, initialize_model_weights, save_as_json
 from model.UNet import UNet
 from model.ddpm import Diffusion as DDPMDiffusion
@@ -66,18 +66,24 @@ def eval_loop(dataloader, model, diffusion, save_dir, args):
         if args.cfg_encoding == "class":
             condition = torch.arange(0, args.num_classes, 1)
 
-        images = images.to(args.device)
+        images = images.to(args.device) 
         condition = condition.to(args.device)
 
-        predicted_images = diffusion.sample(model, condition=condition)
+        predicted_images = diffusion.sample(model, condition=condition) 
 
-        iou = iou_pytorch(images, predicted_images).cpu()
-        cdist = center_distance_pytorch(images, predicted_images).cpu()
+        imgs_norm_test = ((images.clamp(-1, 1) + 1) / 2).type(torch.float32) # images have range -1 to 1
+        imgs_norm_pred = (predicted_images / 255).type(torch.float32) # predicted_images have range 0 to 255
+        
+        iou = iou_pytorch(imgs_norm_test, imgs_norm_pred).cpu()
+        cdist = center_distance_pytorch(imgs_norm_test, imgs_norm_pred).cpu()
+        iou_c = iou_pytorch(center_shapes(imgs_norm_test), 
+                            center_shapes(imgs_norm_pred)).cpu()
 
         for ixd in range(images.shape[0]):
             sample = {"path_original":filenames[ixd],
                       "path_generated":os.path.join(save_dir, os.path.basename(filenames[ixd])),
                       "IoU":iou[ixd].item(), 
+                      "IoU_centered":iou_c[ixd].item(),
                       "l2_distance":cdist[ixd].item(), 
                       }
             
