@@ -7,7 +7,7 @@ from pathlib import Path
 
 import torch
 
-from metrics import iou_pytorch, center_distance_pytorch, center_shapes
+from metrics import iou_pytorch, center_distance_pytorch, center_shapes, max_diameter_and_angle, contour_length, min_angle_distance
 from utils.train_test_utils import get_dataloader, save_images_batch, initialize_model_weights, save_as_json
 from model.UNet import UNet
 from model.ddpm import Diffusion as DDPMDiffusion
@@ -57,6 +57,7 @@ def eval_loop(dataloader, model, diffusion, save_dir, args):
     # metrics and log
     log_data={"samples":[]}
     total_iou = 0
+    total_iou_c = 0
     total_cdist = 0
     n = 0
 
@@ -71,6 +72,7 @@ def eval_loop(dataloader, model, diffusion, save_dir, args):
 
         predicted_images = diffusion.sample(model, condition=condition) 
 
+        # transform range to be between 0 and 1
         imgs_norm_test = ((images.clamp(-1, 1) + 1) / 2).type(torch.float32) # images have range -1 to 1
         imgs_norm_pred = (predicted_images / 255).type(torch.float32) # predicted_images have range 0 to 255
         
@@ -80,11 +82,25 @@ def eval_loop(dataloader, model, diffusion, save_dir, args):
                             center_shapes(imgs_norm_pred)).cpu()
 
         for ixd in range(images.shape[0]):
+
+            max_diameter1, max_angle1, pos1 = max_diameter_and_angle(imgs_norm_test[ixd])
+            max_diameter2, max_angle2, pos2 = max_diameter_and_angle(imgs_norm_pred[ixd])
+
+            c1 = contour_length(imgs_norm_test[ixd])
+            c2 = contour_length(imgs_norm_pred[ixd])
+            
+            absolute_angle_diff = min_angle_distance(max_angle1, max_angle2)
+            absolute_diameter_diff = abs(max_diameter1 - max_diameter2)
+            absolute_contour_diff = abs(c1 - c2)
+
             sample = {"path_original":filenames[ixd],
                       "path_generated":os.path.join(save_dir, os.path.basename(filenames[ixd])),
                       "IoU":iou[ixd].item(), 
                       "IoU_centered":iou_c[ixd].item(),
                       "l2_distance":cdist[ixd].item(), 
+                      "abs_angle_diff":absolute_angle_diff, 
+                      "abs_diameter_diff":absolute_diameter_diff,
+                      "anb_contour_diff":absolute_contour_diff,
                       }
             
             log_data["samples"].append(sample)
@@ -95,10 +111,12 @@ def eval_loop(dataloader, model, diffusion, save_dir, args):
                           )
         
         total_iou += torch.nansum(iou).item()
+        total_iou_c += torch.nansum(iou_c).item()
         total_cdist += torch.nansum(cdist).item()
         n += len(images)
 
     log_data["mean_iou"] = total_iou / n
+    log_data["mean_centered"] = total_iou / n
     log_data["mean_cdist"] = total_cdist / n
 
     return log_data

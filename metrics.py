@@ -1,6 +1,7 @@
+import cv2
 import numpy as np
-import torchvision
 import torch
+import torchvision
 import clip
 
 
@@ -44,6 +45,7 @@ class CLIPMetrics:
         probs = logits_per_image.softmax(dim=-1).cpu().numpy()
         return probs
     
+
 def iou_pytorch(outputs: torch.Tensor, labels: torch.Tensor, threshold: float = 0.5):
     """
     Calculate Intersection over Union (IoU) for RGB images.
@@ -71,6 +73,7 @@ def iou_pytorch(outputs: torch.Tensor, labels: torch.Tensor, threshold: float = 
     iou = (intersection + smooth) / union + smooth # We smooth our division to avoid 0/0
 
     return iou
+
 
 def center_distance_pytorch(outputs: torch.Tensor, labels: torch.Tensor, threshold: float = 0.5, device="cpu"):
     """
@@ -155,6 +158,7 @@ def batch_center_of_mass(bin_images, device="cpu"):
 
     return centers
 
+
 def binary_iou(image1, image2, treshold=0.5):
     """
     Calculates the Intersection over Union (IoU) of two binary images.
@@ -213,3 +217,130 @@ def center_shapes(images: torch.Tensor, treshold=0.5):
                                                         scale=1,
                                                         shear=0)
     return images
+
+
+def max_diameter_and_angle(image):
+    """
+    Calculate the maximum diameter and corresponding angle in an image.
+
+    This function accepts both numpy arrays and PyTorch tensors as input. If the input is a PyTorch tensor, it is converted to a numpy array before processing. The image is then converted to grayscale and thresholded to extract the shape. The function finds contours in the thresholded image and calculates the maximum diameter and corresponding angle.
+
+    Parameters:
+    image (numpy.ndarray or torch.Tensor): The input image. If a PyTorch tensor is provided, it should have the shape (Channels, Height, Width).
+
+    Returns:
+    float: The maximum diameter found in the image.
+    list: A list of angles (in degrees) corresponding to the maximum diameter.
+    list: A list of positions corresponding to the maximum diameter. Each position is a list of two tuples, where the first tuple represents the x-coordinates and the second tuple represents the y-coordinates.
+    """
+    # Check if the image is a PyTorch tensor
+    if torch.is_tensor(image):
+        # Convert the PyTorch tensor to a numpy array
+        image = image.permute(1, 2, 0).cpu().numpy()
+        image = (image * 255).astype(np.uint8)
+
+    # Check if the image is already grayscale
+    if len(image.shape) == 3 and image.shape[2] > 1:
+        # Convert the image to grayscale
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+
+    # Threshold the image to get the shape
+    _, threshold = cv2.threshold(image, 127, 255, 0)
+
+    # Find contours in the threshold image
+    contours, _ = cv2.findContours(threshold, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+
+    # Initialize maximum diameter to 0
+    max_diameter = 0
+    angle = []
+    pos = []
+
+    # Calculate maximum diameter and corresponding angle
+    for cnt in contours:
+        for i in range(len(cnt)):
+            for j in range(i+1, len(cnt)):
+                x1 = cnt[i][0][0]
+                y1 = cnt[i][0][1]
+                x2 = cnt[j][0][0]
+                y2 = cnt[j][0][1]
+
+                diameter = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+                if diameter >= max_diameter:
+
+                    if diameter > max_diameter:
+                        max_diameter = diameter
+                        angle = []
+                        pos = []
+
+                    angle.append(np.arctan2(y2 - y1, x2 - x1) * 180 / np.pi)
+                    pos.append([(x1, x2), (y1, y2)])
+
+    return max_diameter, angle, pos
+
+
+def min_angle_distance(list1, list2):
+    """
+    Calculate the minimum angle distance between two lists of angles.
+
+    This function iterates over each pair of angles (one from each list), and calculates the absolute difference between them.
+    If the difference is greater than 180, it considers the shorter distance around the circle (360 degrees).
+    It keeps track of the smallest difference encountered, which is returned as the result.
+
+    Parameters:
+    list1 (List[float]): The first list of angles (in degrees).
+    list2 (List[float]): The second list of angles (in degrees).
+
+    Returns:
+    float: The minimum angle distance between the two lists of angles.
+    """
+    min_distance = 360  # Initialize minimum distance to the maximum possible value
+    for angle1 in list1:
+        for angle2 in list2:
+            # Calculate the absolute difference between the two angles
+            diff = abs(angle1 - angle2)
+            # If the difference is greater than 180, it is faster to go the other way around the circle
+            if diff > 180:
+                diff = 360 - diff
+            # Update the minimum distance if necessary
+            if diff < min_distance:
+                min_distance = diff
+    return min_distance
+
+
+def contour_length(image):
+    """
+    Calculate the total length of all contours in a grayscale image.
+
+    This function loads a grayscale image from the specified path, thresholds it to binary (black and white), finds the contours in the binary image, and then calculates the total length of these contours. The length of a contour is approximated as the sum of the Euclidean distances between consecutive points on the contour.
+
+    Parameters:
+    image_path (str): The path to the grayscale image file. The image should have white pixels representing the geometric shape and black pixels representing the background.
+
+    Returns:
+    float: The total length of all contours in the image, in pixels.
+    """
+    if torch.is_tensor(image):
+        # Convert the PyTorch tensor to a numpy array
+        image = image.permute(1, 2, 0).cpu().numpy()
+        image = (image * 255).astype(np.uint8)
+
+    # Check if the image is already grayscale
+    if len(image.shape) == 3 and image.shape[2] > 1:
+        # Convert the image to grayscale
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # Threshold the image: this will make the geometric shape white (255) and the background black (0)
+    _, threshold = cv2.threshold(image, 127, 255, 0)
+
+    # Find contours in the threshold image
+    contours, _ = cv2.findContours(threshold, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+
+    # Initialize total length to 0
+    total_length = 0
+
+    # Calculate the length of each contour and add it to the total length
+    for contour in contours:
+        total_length += cv2.arcLength(contour, True)
+
+    return total_length
