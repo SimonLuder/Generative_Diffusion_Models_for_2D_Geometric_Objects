@@ -118,6 +118,17 @@ def get_dataloader(args):
         if vars(args).get("test_images"):
             test_dataset  = ImageImageDataset(labels_path=args.test_labels, transform=transforms, preprocess=preprocess)
 
+    if args.cfg_encoding == "cnn_image":
+
+        print("Loading ImageImageDataset")
+
+        if vars(args).get("train_images"):
+            train_dataset = ImageImageDataset(labels_path=args.train_labels, transform=transforms, preprocess=transforms)
+        if vars(args).get("val_images"):
+            val_dataset   = ImageImageDataset(labels_path=args.val_labels, transform=transforms, preprocess=transforms)
+        if vars(args).get("test_images"):
+            test_dataset  = ImageImageDataset(labels_path=args.test_labels, transform=transforms, preprocess=transforms)
+
     dataloader = dict()
     if vars(args).get("train_images"):
         dataloader["train"] = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)

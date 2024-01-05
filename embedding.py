@@ -4,7 +4,7 @@ import clip
 
 # https://github.com/coderpiaobozhe/classifier-free-diffusion-guidance-Pytorch/blob/master/embedding.py
 class ConditionalClassEmbedding(nn.Module):
-    """This class represents a conditional class embedding layer. 
+    """This class represents a conditional class embedding. 
 
     Args:
         input_dim (int): Number of classes.
@@ -44,7 +44,24 @@ class TabularEmbedding(nn.Module):
     
 
 class CLIPTextEmbedding(nn.Module):
-    
+    """
+    A text embedding model using the CLIP model.
+
+    This class implements a text embedding model using the CLIP model. 
+    The network consists of a pre-trained CLIP model and a fully connected layer block. 
+    The output of the CLIP model is passed through the fully connected layers to generate the final embedding.
+
+    Attributes:
+    device (str): The device on which the model is running.
+    clip_encoder (clip.Model): The pre-trained CLIP model.
+    embedding_dim (int): The dimension of the output from the CLIP model.
+    fully_connected (nn.Sequential): The fully connected layer block for generating the final embedding.
+
+    Methods:
+    forward(x: torch.Tensor) -> torch.Tensor: Defines the computation performed at every call.
+    get_embedding_dim() -> int: Returns the embedding dimension of the CLIP model.
+    """
+
     def __init__(self, out_dim:int, model_name:str="ViT-B/32", device:str="cpu"):
         super().__init__()
         
@@ -65,6 +82,12 @@ class CLIPTextEmbedding(nn.Module):
         return emb
     
     def get_embedding_dim(self):
+        """
+        Returns the embedding dimension of the CLIP model.
+
+        Returns:
+        int: The embedding dimension.
+        """
 
         # Create a dummy input tensor
         dummy_input = clip.tokenize("This is a test string").to(self.device)
@@ -76,6 +99,23 @@ class CLIPTextEmbedding(nn.Module):
         
         
 class CLIPImageEmbedding(nn.Module):
+    """
+    A Convolutional Neural Network (CNN) based image embedding model using CLIP.
+
+    This class implements a CNN for generating embeddings from images using the CLIP model. 
+    The network consists of a pre-trained CLIP model and a fully connected layer block. 
+    The output of the CLIP model is passed through the fully connected layers to generate the final embedding.
+
+    Attributes:
+    device (str): The device on which the model is running.
+    clip_encoder (clip.Model): The pre-trained CLIP model.
+    embedding_dim (int): The dimension of the output from the CLIP model.
+    fully_connected (nn.Sequential): The fully connected layer block for generating the final embedding.
+
+    Methods:
+    forward(x: torch.Tensor) -> torch.Tensor: Defines the computation performed at every call.
+    get_embedding_dim() -> int: Returns the embedding dimension of the CLIP model.
+    """
     
     def __init__(self, out_dim:int, model_name:str="ViT-B/32", device:str="cpu"):
         super().__init__()
@@ -97,7 +137,12 @@ class CLIPImageEmbedding(nn.Module):
         return emb
     
     def get_embedding_dim(self):
+        """
+        Returns the embedding dimension of the CLIP model.
 
+        Returns:
+        int: The embedding dimension.
+        """
         # Create a dummy input tensor
         dummy_input = torch.randn(1, 3, 224, 224).to(self.device)
         
@@ -105,3 +150,41 @@ class CLIPImageEmbedding(nn.Module):
         with torch.no_grad():
             embedding_dim = self.clip_encoder.encode_image(dummy_input).size(1)
             return embedding_dim
+        
+
+class CNNImageEmbedding(nn.Module):
+
+    """
+    A Convolutional Neural Network (CNN) based image embedding model.
+
+    This class implements a CNN for generating embeddings from images. 
+    The network consists of three convolutional layers, each followed by a ReLU activation function, and an adaptive average pooling layer. 
+    The output of the convolutional layers is flattened and passed through a fully connected layer to generate the final embedding.
+
+    Attributes:
+    conv (nn.Sequential): The sequential container of convolutional layers.
+    fc (nn.Linear): The fully connected layer for generating the final embedding.
+
+    Methods:
+    forward(x: torch.Tensor) -> torch.Tensor: Defines the computation performed at every call.
+    """
+    
+    def __init__(self, input_channel:int, out_dim:int):
+        super().__init__()
+        self.conv = nn.Sequential(
+            nn.Conv2d(input_channel, 32, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.AdaptiveAvgPool2d((1, 1)),  # this will make the output (N, 128, 1, 1)
+        )
+        self.fc = nn.Linear(128, out_dim)
+
+    def forward(self, x:torch.Tensor) -> torch.Tensor:
+        x = self.conv(x)
+        x = x.view(x.size(0), -1)  # flatten the tensor
+        emb = self.fc(x)
+        return emb
+

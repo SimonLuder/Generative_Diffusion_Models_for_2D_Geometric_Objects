@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from modules import UpBlock, DownBlock, DoubleConv, SelfAttention
-from embedding import ConditionalClassEmbedding, CLIPTextEmbedding, TabularEmbedding, CLIPImageEmbedding
+from embedding import ConditionalClassEmbedding, CLIPTextEmbedding, TabularEmbedding, CLIPImageEmbedding, CNNImageEmbedding
 
 class UNet(nn.Module):
     """
@@ -92,6 +92,8 @@ class UNet(nn.Module):
             self.label_emb = ConditionalClassEmbedding(num_embeddings=num_classes, embedding_dim=time_channel, out_dim=time_channel)
         elif cfg_encoding == "tabular":
             self.label_emb = TabularEmbedding(input_dim=input_dim, out_dim=time_channel)
+        elif cfg_encoding == "cnn_image":
+            self.label_emb = CNNImageEmbedding(input_channel=in_channel, out_dim=time_channel)
         elif cfg_encoding == "clip_text":
             self.label_emb = CLIPTextEmbedding(out_dim=time_channel, model_name=cfg_model_name, device=device)
         elif cfg_encoding == "clip_image":
