@@ -10,11 +10,9 @@ import torch.nn as nn
 from tqdm import tqdm
 from torch import optim
 
-import clip
-
 from model.UNet import UNet
 from model.ddpm import Diffusion as DDPMDiffusion
-from utils.wandb import WandbManager, WandbTable, wandb_image
+from utils.wandb import WandbManager, wandb_image
 from utils.train_test_utils import get_dataloader, initialize_model_weights, save_as_json
 from test import eval_loop
 
@@ -106,8 +104,6 @@ def main():
             # set propoportion of conditions to zero
             if args.cfg_encoding is None or np.random.random() < 0.1:
                 condition = None
-            else:
-                pass
 
             predicted_noise = model(x=x_t, time=t, y=condition)
             loss = mse(noise, predicted_noise)
@@ -170,11 +166,6 @@ def main():
             # Path(os.path.split(optim_path)[0]).mkdir( parents=True, exist_ok=True )
             torch.save(model.state_dict(), model_path)
             # torch.save(optimizer.state_dict(), optim_path)
-            # wandb_manager.log_torch_model(name=f"{args.run_name}", 
-            #                               path=model_path,
-            #                               aliases=[f"ep{epoch}"],
-            #                               config=vars(args)
-            #                               )
 
     wandb_manager.log_everything(run_name=args.run_name, path=f"runs/{args.run_name}")
             
@@ -224,7 +215,7 @@ if __name__ == "__main__":
     parser.add_argument("--val_images", type=str, default="./data/val32/images/")
     parser.add_argument("--test_images", type=str, default="./data/test32/images/")
 
-    # Only relevant if cfg_encoding is "clip"
+    # Set path to file with image labels
     parser.add_argument("--train_labels", type=str, default="./data/train32/labels.csv")
     parser.add_argument("--val_labels", type=str, default="./data/val32/labels.csv")
     parser.add_argument("--test_labels", type=str, default="./data/test32/labels.csv")
@@ -234,7 +225,7 @@ if __name__ == "__main__":
 
     # ===========================================Conditioning=============================================
     # If conditional generation is trained 
-    parser.add_argument("--cfg_encoding", type=str, default="clip_text")
+    parser.add_argument("--cfg_encoding", type=str, default="cnn_image") # tabular, clip_text, clip_image, cnn_image
     # only relevant if cfg_encoding is set to "clip_image" or "clip_text"
     parser.add_argument("--encoder_model", type=str, default="ViT-B/32")
     # only relevant if cfg_encoding is set to "classes"

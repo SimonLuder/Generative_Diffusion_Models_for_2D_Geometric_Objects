@@ -76,11 +76,10 @@ class ImageImageDataset(torch.utils.data.Dataset):
     Attributes:
         transform (callable, optional): Optional transform to be applied on a sample.
         image_files (list): List of image file paths.
-        captions (list): raw image.
     """
     def __init__(self, labels_path, transform=None, preprocess=None):
-        self.transform = transform
-        self.preprocess = preprocess
+        self.transform_img = transform
+        self.transform_cond = preprocess
         df = pd.read_csv(labels_path)
         self.image_files = df["file"].tolist()
 
@@ -91,13 +90,13 @@ class ImageImageDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         filename = self.image_files[idx]
         image = Image.open(filename)
-        caption = image
+        condition = image
 
-        if self.preprocess:
-            caption = self.preprocess(caption)
+        if self.transform_cond:
+            condition = self.transform_cond(condition)
 
-        if self.transform:
-            image = self.transform(image)
+        if self.transform_img:
+            image = self.transform_img(image)
             
-        return image, caption, filename
+        return image, condition, filename
     
