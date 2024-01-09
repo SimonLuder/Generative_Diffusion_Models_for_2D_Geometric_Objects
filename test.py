@@ -78,8 +78,8 @@ def eval_loop(dataloader, model, diffusion, save_dir, args):
         
         iou = iou_pytorch(imgs_norm_test, imgs_norm_pred).cpu()
         cdist = center_distance_pytorch(imgs_norm_test, imgs_norm_pred).cpu()
-        iou_c = iou_pytorch(center_shapes(imgs_norm_test), 
-                            center_shapes(imgs_norm_pred)).cpu()
+        iou_c = iou_pytorch(center_shapes(imgs_norm_test, threshold=0.5), 
+                            center_shapes(imgs_norm_pred, threshold=0.5)).cpu()
 
         for ixd in range(images.shape[0]):
 

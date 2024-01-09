@@ -192,7 +192,7 @@ def binary_iou(image1, image2, treshold=0.5):
     return iou
 
 
-def center_shapes(images: torch.Tensor, treshold=0.5):
+def center_shapes(images: torch.Tensor, threshold=0.5):
     """
     Center the shapes in binary images.
 
@@ -204,6 +204,9 @@ def center_shapes(images: torch.Tensor, treshold=0.5):
     Tensor: Images with centered shapes.
     """
     imgs = torch.clone(images)
+
+    imgs = imgs >= threshold
+
     B, C, H, W = images.shape
     centers = batch_center_of_mass(imgs)
     centers[:,0] = (H-1) / 2 - centers[:,0]
@@ -294,14 +297,21 @@ def min_angle_distance(list1, list2):
     Returns:
     float: The minimum angle distance between the two lists of angles.
     """
-    min_distance = 360  # Initialize minimum distance to the maximum possible value
+    min_distance = 180  # Initialize minimum distance to the maximum possible value
+    if len(list1) == 0 or len(list2) == 0:
+        min_distance = None
+
     for angle1 in list1:
         for angle2 in list2:
             # Calculate the absolute difference between the two angles
             diff = abs(angle1 - angle2)
             # If the difference is greater than 180, it is faster to go the other way around the circle
-            if diff > 180:
+            if diff >= 180:
                 diff = 360 - diff
+
+            if diff >= 90:
+                diff = 180 - diff
+                
             # Update the minimum distance if necessary
             if diff < min_distance:
                 min_distance = diff
