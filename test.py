@@ -100,7 +100,7 @@ def eval_loop(dataloader, model, diffusion, save_dir, args):
                       "l2_distance":cdist[ixd].item(), 
                       "abs_angle_diff":absolute_angle_diff, 
                       "abs_diameter_diff":absolute_diameter_diff,
-                      "anb_contour_diff":absolute_contour_diff,
+                      "abs_contour_diff":absolute_contour_diff,
                       }
             
             log_data["samples"].append(sample)
