@@ -20,6 +20,8 @@ if __name__ == "__main__":
 
 
     git_root = get_git_root(".")
+    os.chdir(git_root)
+    print(git_root)
 
     source = args.source
     destination = args.destination
@@ -27,10 +29,10 @@ if __name__ == "__main__":
     if destination is None:
         destination = source
 
-    if not os.path.exists(os.path.join(git_root, destination)):
-        os.makedirs(os.path.join(git_root, destination))
+    if not os.path.exists(destination):
+        os.makedirs(destination)
 
     # update and save csv
-    df = pd.read_csv(os.path.join(git_root, source, "labels.csv"))
+    df = pd.read_csv(os.path.join(source, "labels.csv"))
     df_sub = df.groupby("shape_name").head(args.n)
-    df_sub.to_csv(os.path.join(git_root, destination, f"labels_sub{args.n}.csv"), index=False)
+    df_sub.to_csv(os.path.join(destination, f"labels_sub{args.n}.csv"), index=False)

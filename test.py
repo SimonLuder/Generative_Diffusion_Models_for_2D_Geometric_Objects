@@ -7,7 +7,7 @@ from pathlib import Path
 
 import torch
 
-from metrics import iou_pytorch, center_distance_pytorch, center_shapes, max_diameter_and_angle, contour_length, min_angle_distance
+from utils.metrics import iou_pytorch, center_distance_pytorch, center_shapes, max_diameter_and_angle, contour_length, min_angle_distance
 from utils.train_test_utils import get_dataloader, save_images_batch, initialize_model_weights, save_as_json
 from model.UNet import UNet
 from model.ddpm import Diffusion as DDPMDiffusion

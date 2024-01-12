@@ -1,4 +1,5 @@
 import os
+import git
 import cv2
 import argparse
 import pandas as pd
@@ -49,14 +50,25 @@ def replace_image_paths(df, column, new_dir):
     return df
 
 
+
+def get_git_root(path):
+
+        git_repo = git.Repo(path, search_parent_directories=True)
+        git_root = git_repo.git.rev_parse("--show-toplevel")
+        return git_root
+
 if __name__ == "__main__":
     
     parser = argparse.ArgumentParser()
-    parser.add_argument('--source', type=str, default="./data/train/", help="Source directory")
-    parser.add_argument('--destination', type=str, default=f"./data/train32")
+    parser.add_argument('--source', type=str, default="data/train/", help="Source directory")
+    parser.add_argument('--destination', type=str, default=f"data/train32")
     parser.add_argument('--custom_destination_path', type=str, default=None)
     parser.add_argument('--size', type=int, default=32, help="Image size for square proportions")
     args = parser.parse_args()
+
+    # change workdir to git root
+    git_root = get_git_root(".")
+    os.chdir(git_root)
 
     if not os.path.exists(args.destination):
         os.makedirs(args.destination)

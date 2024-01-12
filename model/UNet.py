@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from modules import UpBlock, DownBlock, DoubleConv, SelfAttention
+from model.modules import UpBlock, DownBlock, DoubleConv, SelfAttention
 from embedding import ConditionalClassEmbedding, CLIPTextEmbedding, TabularEmbedding, CLIPImageEmbedding, CNNImageEmbedding
 
 class UNet(nn.Module):
