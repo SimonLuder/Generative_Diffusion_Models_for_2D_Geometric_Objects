@@ -4,6 +4,55 @@ This repository contains the code for the project: Generative Diffusion Models f
 The project represents the P7 in the Masters of Science in Engineering (MSE) study program at FHNW.
 
 
+## Structure
+------------
+├── README.md                           <- The file you are reading right now
+│
+├── train.py                            <- The main file for training the models
+│
+├── test.py                             <- Code for testing and validating the models during and after training
+│
+├── inference.py                        <- Use this script to generate conditioned new samples with a trained model
+│
+├── noising_test.py                     <- Noise images with this script
+│
+├── dataset.py                          <- Contains the dataset classes
+│
+├── embedding.py                        <- Code for the various embedding classes
+│
+├── data                                <- Place the datasets for training here
+│
+├── model              
+│   ├── ddpm.py                         <- Contains the ddpm model class
+│   ├── modules.py                      <- Contains the module classes for the UNet
+│   └── UNet.py                         <- Contains the UNet class
+│
+├── notebooks  
+│   ├── gradient_visualization.ipynb    <- Notebook for visualizing the gradient of an image
+│   ├── report_visualizations.ipynb     <- Notebook with general visualizations for the report
+│   └── results.ipynb                   <- Contains the results from the training for the report
+│
+├── tools                 
+│   ├── reshape_dataset.py              <- Run this script to change the image resolution of a selected dataset
+│   ├── setup_classes.py                <- Run this script to create a conditional class dataset (outdated)
+│   └── subsample_dataset.py            <- Run this script to create a subset of a selected dataset
+│
+├── utils                    
+│   ├── metrics.py                      <- Contains metrics for evaluation 
+│   ├── train_test_utils.py             <- Contains general utils for training and testing
+│   └── wandb.py                        <- Contains WandB functionalities for logging
+│
+├── dockerfile
+│   └── Dockerfile.slurm                <- Dockerfile for training models on slurm                  
+│
+├── requirements.txt                    <- The requirements file
+│
+├── images                              <- Contains images created for the report
+│
+└── runs                                <- This folder contains the individual trained models and logs during training
+------------
+
+
 ## Docker
 To train on 
 
@@ -31,21 +80,18 @@ Note that the config needs to be adapted to train with the alternative image siz
 
 Train dataset :
 ``` sh
-python reshape_dataset.py --source ./data/train256/ --destination ./data/train128/ --size 128
 python reshape_dataset.py --source ./data/train256/ --destination ./data/train64/ --size 64
 python reshape_dataset.py --source ./data/train256/ --destination ./data/train32/ --size 32
 ```
 
 Validation dataset :
 ``` sh
-python reshape_dataset.py --source ./data/val256/ --destination ./data/val128/ --size 128
 python reshape_dataset.py --source ./data/val256/ --destination ./data/val64/ --size 64
 python reshape_dataset.py --source ./data/val256/ --destination ./data/val32/ --size 32
 ```
 
 Test dataset :
 ``` sh
-python reshape_dataset.py --source ./data/test256/ --destination ./data/test128/ --size 128
 python reshape_dataset.py --source ./data/test256/ --destination ./data/test64/ --size 64
 python reshape_dataset.py --source ./data/test256/ --destination ./data/test32/ --size 32
 ```
@@ -61,14 +107,12 @@ python reshape_dataset.py --source ./data/train256/ --destination ./slurm/data/t
 
 Validation dataset :
 ``` sh
-python reshape_dataset.py --source ./data/val256/ --destination ./slurm/data/val128/ --size 128 --custom_destination_path /workspace/data/val128/
 python reshape_dataset.py --source ./data/val256/ --destination ./slurm/data/val64/ --size 64 --custom_destination_path /workspace/data/val64/
 python reshape_dataset.py --source ./data/val256/ --destination ./slurm/data/val32/ --size 32 --custom_destination_path /workspace/data/val32/
 ```
 
 Test dataset :
 ``` sh
-python reshape_dataset.py --source ./data/test256/ --destination ./slurm/data/test128/ --size 128 --custom_destination_path /workspace/data/test128/
 python reshape_dataset.py --source ./data/test256/ --destination ./slurm/data/test64/ --size 64 --custom_destination_path /workspace/data/test64/
 python reshape_dataset.py --source ./data/test256/ --destination ./slurm/data/test32/ --size 32 --custom_destination_path /workspace/data/test32/
 ```
@@ -81,3 +125,9 @@ python ./utils/dataset/subsample_dataset.py --source "data/train256/" --n 100
 python ./utils/dataset/subsample_dataset.py --source "data/train64/" --n 100
 python ./utils/dataset/subsample_dataset.py --source "data/train32/" --n 100
 ```
+
+### slurm
+``` sh
+python ./utils/dataset/subsample_dataset.py --source "slurm/data/train256/" --n 100
+python ./utils/dataset/subsample_dataset.py --source "slurm/data/train64/" --n 100
+python ./utils/dataset/subsample_dataset.py --source "slurm/data/train32/" --n 100
