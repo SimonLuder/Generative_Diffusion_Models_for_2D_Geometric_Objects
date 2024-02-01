@@ -27,7 +27,7 @@ def sort_images(base_dir, target_dir, regex_patterns):
                     break  # a file is moved to the first matching pattern's folder
 
 if __name__ == "__main__":
-    base_dir = "./data/Unconditional/shapes32"
-    target_dir = "./data/Conditional/"
+    base_dir = "../data/Unconditional/shapes32"
+    target_dir = "../data/Conditional/"
     regex_patterns = ["Triangle", "Circle", "Heptagon", "Octagon", "Hexagon", "Square", "Nonagon", "Pentagon", "Star"]
     sort_images(base_dir, target_dir, regex_patterns)
