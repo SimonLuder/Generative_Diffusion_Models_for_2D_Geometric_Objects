@@ -6,6 +6,7 @@ The project represents the P7 in the Masters of Science in Engineering (MSE) stu
 
 ## Structure
 ------------
+```
 ├── README.md                           <- The file you are reading right now
 │
 ├── train.py                            <- The main file for training the models
@@ -50,6 +51,7 @@ The project represents the P7 in the Masters of Science in Engineering (MSE) stu
 ├── images                              <- Contains images created for the report
 │
 └── runs                                <- This folder contains the individual trained models and logs during training
+```
 ------------
 
 
@@ -72,7 +74,7 @@ docker save geoshapes > geoshapes.tar
 
 ```
 
-
+------------
 ## Dataset reshaping
 
 To create a dataset version with different image sizes, run the reshape_dataset.py script. 
@@ -116,7 +118,7 @@ Test dataset :
 python reshape_dataset.py --source ./data/test256/ --destination ./slurm/data/test64/ --size 64 --custom_destination_path /workspace/data/test64/
 python reshape_dataset.py --source ./data/test256/ --destination ./slurm/data/test32/ --size 32 --custom_destination_path /workspace/data/test32/
 ```
-
+------------
 ## Subset generation
 To create a small dataset for training, the subsample_dataset.py script can be executed. This can be executed via the shell with the following commands. 
 Create a subsample of the dataset
