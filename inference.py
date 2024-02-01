@@ -5,18 +5,19 @@ import argparse
 import pandas as pd
 from tqdm import tqdm
 from pathlib import Path
-import cv2
+from PIL import Image
 
 import torch
+import clip
 
-from metrics import iou_pytorch, center_distance_pytorch
-from utils.train_test_utils import get_dataloader, save_images_batch, initialize_model_weights, save_as_json
+from utils.metrics import iou_pytorch, center_distance_pytorch
+from utils.train_test_utils import initialize_model_weights, save_images_batch
 from utils.wandb import WandbManager, wandb_image
 from model.UNet import UNet
 from model.ddpm import Diffusion as DDPMDiffusion
 
 
-def inference(run_name, epoch):
+def inference(run_name, epoch, condition):
 
     # open config
     with open(f'runs/{run_name}/config.json') as json_file:
@@ -34,13 +35,14 @@ def inference(run_name, epoch):
         model = UNet(image_size=args.image_size, 
                     cfg_encoding=args.cfg_encoding,
                     num_classes=args.num_classes,
+                    cfg_model_name=args.encoder_model,
                     device=args.device,
                     act=args.act)
     else:
         print(f'"{args.model}" model not implemented')
 
     initialize_model_weights(model=model, weight_path=f"runs/{run_name}/models/{epoch}/model.pt", device=args.device)
-    model.eval()
+    model.to(args.device).eval()
 
     # set diffusion model
     diffusion = DDPMDiffusion(img_size=args.image_size, 
@@ -50,15 +52,24 @@ def inference(run_name, epoch):
                               s=args.s,
                               device=args.device,
                           )
-    
+
+    # apply clip tokenization
+    if args.cfg_encoding == "clip":
+        condition = clip.tokenize(condition)
+
+    condition = condition.to(args.device)
+
     # predict
-    image = diffusion.sample(model=model, condition="test")
-    cv2.imshow(image.cpu().numpy())
+    images = diffusion.sample(model=model, condition=condition, cfg_scale=3)
+    images = images.cpu()
+
+    save_images_batch(images, filenames=["test_image.jpg"] * images.shape[0], save_dir="./")
 
 
 if __name__ == "__main__":
 
-    run_name = "2D_GeoShape_32_linear_clip_1701532567"
+    run_name = "2D_GeoShape_32_linear_clip_1701625192"
     epoch = "latest"
-    inference(run_name, epoch)
+    condition = "star with radius 51 aspect ratio 1.7 rotation -24 degrees located at (76, 92)"
+    inference(run_name, epoch, condition)
 

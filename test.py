@@ -1,4 +1,5 @@
 import os
+import time
 import json
 import argparse
 import pandas as pd
@@ -8,7 +9,7 @@ from pathlib import Path
 import torch
 
 from utils.metrics import iou_pytorch, center_distance_pytorch, center_shapes, max_diameter_and_angle, contour_length, min_angle_distance
-from utils.train_test_utils import get_dataloader, save_images_batch, initialize_model_weights, save_as_json
+from utils.train_test_utils import get_dataloader, save_images_batch, initialize_model_weights, save_as_json, load_from_json
 from model.UNet import UNet
 from model.ddpm import Diffusion as DDPMDiffusion
 
@@ -27,11 +28,14 @@ def load_model(weight_path, args):
 
     if args.model == "unet_base":
         model = UNet(image_size=args.image_size, 
+                    in_channel=args.image_channels,
+                    out_channel=args.image_channels,
                     cfg_encoding=args.cfg_encoding,
                     num_classes=args.num_classes,
                     cfg_model_name=args.encoder_model,
                     device=args.device,
-                    act=args.act)
+                    act=args.act,
+                    ).to(args.device)
     else:
         print(f'"{args.model}" model not implemented')
 
@@ -125,13 +129,23 @@ def eval_loop(dataloader, model, diffusion, save_dir, args):
 
 if __name__ == "__main__":
 
-    run_name = "2D_GeoShape_32_linear_clip_1701935944"
-    epoch = "latest"
+    run_name = "2D_GeoShape_sub100_32_linear_clip_image_1705569629"
+    epoch = "3250"
 
     args = load_config(run_name)
+    args.batch_size = 12
     
     # get device 
     args.device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    args.train_images   = "./data/train32/images/"
+    args.val_images     = "./data/val32/images/"
+    args.test_images    = "./data/test32/images/"
+
+    args.train_labels   = "./data/train32/labels_sub100.csv"
+    args.val_labels     = "./data/val32/labels.csv"
+    args.test_labels    = "./data/test32/labels.csv"
+
 
     # Dataloader
     dataloader = get_dataloader(args=args)
@@ -146,10 +160,18 @@ if __name__ == "__main__":
     save_dir = f"runs/{run_name}/test/{epoch}"
     Path( save_dir ).mkdir( parents=True, exist_ok=True )
 
-    log_data = eval_loop(dataloader=dataloader["test"], 
+    logged_metrics = load_from_json(f"runs/{run_name}/metrics.json")
+
+    log_data={"test": dict()}
+    log_data["test"] = eval_loop(dataloader=dataloader["test"], 
                          model=model,
                          diffusion=diffusion,
                          save_dir=save_dir,
                          args=args)
+    
+    log_data["test"]["epoch"] = epoch
+    log_data["test"]["time"] = time.time()
 
-    save_as_json(log_data, filepath=save_dir)
+    logged_metrics.append(log_data)
+
+    save_as_json(logged_metrics, filepath=f"runs/{run_name}/metrics.json")

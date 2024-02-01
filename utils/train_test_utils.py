@@ -155,3 +155,9 @@ def save_as_json(data_dict, filepath):
     Path(path).mkdir( parents=True, exist_ok=True )
     with open(filepath, "w") as file:
         json.dump(data_dict, file)
+
+
+def load_from_json(filepath):
+    with open(filepath, "r") as file:
+        data_dict = json.load(file)
+    return data_dict
